@@ -22,7 +22,7 @@ interface AppContextType {
   
   // User & Auth
   currentUser: User | null;
-  login: (email: string, password: string, role?: 'customer' | 'admin') => boolean;
+  login: (email: string, password: string, role?: 'customer' | 'admin' | 'employee') => boolean;
   logout: () => void;
 
   // Users Management
@@ -454,13 +454,31 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
 
   const clearCart = () => setCart([]);
 
-  const login = (email: string, password: string, role: 'customer' | 'admin' = 'customer'): boolean => {
-    // Mock login - in real app, this would call an API
+  const login = (
+    email: string,
+    password: string,
+    role: 'customer' | 'admin' | 'employee' = 'customer',
+  ): boolean => {
+    // Mock login. First try to match an existing user (employees and registered admins
+    // must hit this path so their actual role is preserved). If no match, fall back
+    // to the demo mock user using the requested role.
+    const normalizedEmail = email.trim().toLowerCase();
+    const existing = users.find((u) => u.email.toLowerCase() === normalizedEmail && u.active);
+
+    if (existing) {
+      setCurrentUser(existing);
+      return true;
+    }
+
+    const fallback: Record<typeof role, { id: string; name: string }> = {
+      admin: { id: 'admin-1', name: 'Admin User' },
+      employee: { id: 'emp-1', name: 'Empleado' },
+      customer: { id: 'user-1', name: 'Customer User' },
+    };
     const mockUser: User = {
-      id: role === 'admin' ? 'admin-1' : 'user-1',
+      ...fallback[role],
       email,
-      name: role === 'admin' ? 'Admin User' : 'Customer User',
-      role: role === 'admin' ? 'admin' : 'customer',
+      role,
       active: true,
       createdAt: new Date().toISOString(),
     };

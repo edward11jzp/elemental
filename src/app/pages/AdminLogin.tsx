@@ -9,17 +9,33 @@ import { toast } from 'sonner';
 export default function AdminLogin() {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
-  const { login } = useApp();
+  const { login, users } = useApp();
   const navigate = useNavigate();
 
-  const handleSubmit = (e: React.FormEvent) => {
-    e.preventDefault();
-    if (login(email, password, 'admin')) {
-      toast.success('¡Administrador conectado exitosamente!');
-      navigate('/admin/dashboard');
+  const handleLogin = (intendedRole: 'admin' | 'employee') => {
+    if (!email || !password) {
+      toast.error('Ingresa correo y contraseña');
+      return;
+    }
+    if (login(email, password, intendedRole)) {
+      // The existing-user lookup in login() may override intendedRole. Resolve final role.
+      const found = users.find(
+        (u) => u.email.toLowerCase() === email.trim().toLowerCase() && u.active,
+      );
+      const finalRole = found?.role ?? intendedRole;
+      const isEmployee = finalRole === 'employee';
+      toast.success(
+        isEmployee ? '¡Empleado conectado exitosamente!' : '¡Administrador conectado exitosamente!',
+      );
+      navigate(isEmployee ? '/admin/orders' : '/admin/dashboard');
     } else {
       toast.error('Error al iniciar sesión');
     }
+  };
+
+  const handleSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    handleLogin('admin');
   };
 
   return (
@@ -59,6 +75,23 @@ export default function AdminLogin() {
               className="w-full bg-white text-black hover:bg-gray-200"
             >
               Iniciar Sesión en Portal de Administrador
+            </Button>
+
+            <div className="relative my-2">
+              <div className="absolute inset-0 flex items-center">
+                <div className="w-full border-t border-border" />
+              </div>
+              <div className="relative flex justify-center text-xs">
+                <span className="bg-card px-2 text-muted-foreground">o</span>
+              </div>
+            </div>
+
+            <Button
+              type="button"
+              onClick={() => handleLogin('employee')}
+              className="w-full bg-secondary text-white border border-border hover:bg-secondary/80"
+            >
+              Entrar al Portal de Control
             </Button>
           </form>
 

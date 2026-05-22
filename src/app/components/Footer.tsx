@@ -35,12 +35,12 @@ export default function Footer() {
             <ul className="space-y-2">
               <li>
                 <Link to="/men/t-shirts" className="text-muted-foreground hover:text-white transition-colors text-sm">
-                  Hombre
+                  Caballeros
                 </Link>
               </li>
               <li>
                 <Link to="/women/t-shirts" className="text-muted-foreground hover:text-white transition-colors text-sm">
-                  Mujer
+                  Damas
                 </Link>
               </li>
               <li>
@@ -66,8 +66,8 @@ export default function Footer() {
                 </Link>
               </li>
               <li>
-                <Link to="/account" className="text-muted-foreground hover:text-white transition-colors text-sm">
-                  Mi Cuenta
+                <Link to="/revisar-pedido" className="text-muted-foreground hover:text-white transition-colors text-sm">
+                  Revisa Tu Pedido
                 </Link>
               </li>
             </ul>

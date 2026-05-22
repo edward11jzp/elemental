@@ -8,6 +8,10 @@ import { Textarea } from '../components/ui/textarea';
 import { RadioGroup, RadioGroupItem } from '../components/ui/radio-group';
 import { toast } from 'sonner';
 import { Upload, Check, ChevronDown, X, Plus, Trash2, HelpCircle } from 'lucide-react';
+import { findColor, isLightSwatch } from '../colors';
+import { loadSizes, groupSizes, GROUP_LABELS, type SizeGroup } from '../sizes';
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from '../components/ui/dialog';
+import { Ruler } from 'lucide-react';
 import backShirtImage from 'figma:asset/b830e653f860474b6908972729c57667f9dc6842.png';
 import womenBackShirtImage from '../../imports/image-1.png';
 import womenFrontShirtImage from '../../imports/Screenshot_2026-05-16_at_1.21.33_PM.png';
@@ -175,6 +179,7 @@ export default function ProductDetail() {
 
   const product = products.find(p => p.id === id);
   const [selectedSize, setSelectedSize] = useState('');
+  const [isSizeGuideOpen, setIsSizeGuideOpen] = useState(false);
   const [selectedColor, setSelectedColor] = useState('');
   const [quantity, setQuantity] = useState(6);
   const [isCustom, setIsCustom] = useState(false);
@@ -577,7 +582,17 @@ export default function ProductDetail() {
 
             {/* Size Selection */}
             <div className="mb-6">
-              <Label className="mb-2 block">Talla</Label>
+              <div className="flex items-center justify-between mb-2">
+                <Label className="block">Talla</Label>
+                <button
+                  type="button"
+                  onClick={() => setIsSizeGuideOpen(true)}
+                  className="flex items-center gap-1.5 text-xs text-white/70 hover:text-white border border-white/20 hover:border-white/60 rounded-full px-3 py-1 transition-colors"
+                >
+                  <Ruler className="h-3.5 w-3.5" />
+                  Ver Tallas Disponibles
+                </button>
+              </div>
               <div className="flex gap-2 flex-wrap">
                 {product.sizes.map(size => (
                   <button
@@ -595,6 +610,59 @@ export default function ProductDetail() {
               </div>
             </div>
 
+            {/* Size Guide Dialog */}
+            <Dialog open={isSizeGuideOpen} onOpenChange={setIsSizeGuideOpen}>
+              <DialogContent className="bg-black border border-white/10 text-white max-w-2xl">
+                <DialogHeader>
+                  <DialogTitle className="flex items-center gap-2">
+                    <Ruler className="h-5 w-5" /> Tallas Disponibles
+                  </DialogTitle>
+                  <DialogDescription className="text-white/60">
+                    Estas son las tallas que ofrecemos para este producto.
+                  </DialogDescription>
+                </DialogHeader>
+
+                {(() => {
+                  const all = loadSizes();
+                  const productSizesSet = new Set(product.sizes);
+                  const productSizes = all.filter((s) => productSizesSet.has(s.value));
+                  const grouped = groupSizes(productSizes);
+                  const order: SizeGroup[] = ['unica', 'ninos', 'adultos', 'otras'];
+                  const hasAny = order.some((g) => grouped[g].length > 0);
+
+                  return (
+                    <div className="mt-4 space-y-5">
+                      {!hasAny && (
+                        <p className="text-sm text-muted-foreground">Sin tallas configuradas.</p>
+                      )}
+                      {order.map((g) =>
+                        grouped[g].length > 0 ? (
+                          <div key={g}>
+                            <p className="text-xs uppercase tracking-[0.2em] text-white/50 mb-3">
+                              {GROUP_LABELS[g]}
+                            </p>
+                            <div className="flex flex-wrap gap-2">
+                              {grouped[g].map((s) => (
+                                <span
+                                  key={s.value}
+                                  className="bg-white/5 border border-white/20 rounded-md px-4 py-2 text-sm"
+                                >
+                                  {s.label}
+                                </span>
+                              ))}
+                            </div>
+                          </div>
+                        ) : null
+                      )}
+                      <p className="text-xs text-white/40 pt-2 border-t border-white/10">
+                        Niños: 2-4 hasta 14-16. Adultos: XS hasta 4XL. También disponible Talla Única.
+                      </p>
+                    </div>
+                  );
+                })()}
+              </DialogContent>
+            </Dialog>
+
             {/* Color Selection */}
             <div className="mb-6">
               <Label className="mb-2 block">Color</Label>
@@ -607,15 +675,24 @@ export default function ProductDetail() {
               >
                 <div className="flex items-center gap-3">
                   {selectedColor ? (
-                    <>
-                      <div
-                        className="w-8 h-8 rounded-full border-2 border-white/30"
-                        style={{ backgroundColor: selectedColor.startsWith('#') ? selectedColor : COLOR_MAP[selectedColor] }}
-                      />
-                      <span className="text-sm">
-                        {selectedColor.startsWith('#') ? 'Color seleccionado' : selectedColor}
-                      </span>
-                    </>
+                    (() => {
+                      const info = findColor(selectedColor);
+                      const swatch = info?.swatch
+                        ?? (selectedColor.startsWith('#') ? selectedColor : COLOR_MAP[selectedColor])
+                        ?? selectedColor;
+                      const label = info
+                        ? `${info.name} - ${info.code}`
+                        : (selectedColor.startsWith('#') ? 'Color seleccionado' : selectedColor);
+                      return (
+                        <>
+                          <div
+                            className="w-8 h-8 rounded-full border-2 border-white/30"
+                            style={{ background: swatch }}
+                          />
+                          <span className="text-sm">{label}</span>
+                        </>
+                      );
+                    })()
                   ) : (
                     <span className="text-sm text-muted-foreground">Seleccionar color</span>
                   )}
@@ -629,9 +706,13 @@ export default function ProductDetail() {
               {isColorDropdownOpen && (
                 <div className="mt-2 bg-secondary border border-border rounded-md p-4 max-h-[300px] overflow-y-auto">
                   {product.colorPalette && product.colorPalette.length > 0 ? (
-                    <div className="flex gap-2 flex-wrap">
+                    <div className="flex gap-3 flex-wrap">
                       {product.colorPalette.map((colorValue, index) => {
-                        const isWhite = colorValue === '#FFFFFF';
+                        const info = findColor(colorValue);
+                        const swatch = info?.swatch ?? colorValue;
+                        const light = isLightSwatch(info);
+                        const label = info ? `${info.name} - ${info.code}` : colorValue;
+                        const isSelected = selectedColor === colorValue;
 
                         return (
                           <button
@@ -640,23 +721,31 @@ export default function ProductDetail() {
                               setSelectedColor(colorValue);
                               setIsColorDropdownOpen(false);
                             }}
-                            className={`relative w-12 h-12 rounded-full border-2 transition-all hover:scale-110 ${
-                              selectedColor === colorValue
-                                ? 'border-white ring-2 ring-white ring-offset-2 ring-offset-black'
-                                : isWhite
-                                ? 'border-gray-600 hover:border-white'
-                                : 'border-gray-700 hover:border-white'
-                            }`}
-                            style={{ backgroundColor: colorValue }}
-                            title={colorValue}
+                            className={`group/swatch relative flex flex-col items-center gap-1.5 transition-transform hover:scale-105`}
+                            title={label}
                           >
-                            {selectedColor === colorValue && (
-                              <Check
-                                className={`absolute inset-0 m-auto h-6 w-6 ${
-                                  isWhite ? 'text-black' : 'text-white'
-                                }`}
-                              />
-                            )}
+                            <div
+                              className={`relative w-12 h-12 rounded-full border-2 transition-all ${
+                                isSelected
+                                  ? 'border-white ring-2 ring-white ring-offset-2 ring-offset-black'
+                                  : light
+                                  ? 'border-gray-500 group-hover/swatch:border-white'
+                                  : 'border-gray-700 group-hover/swatch:border-white'
+                              }`}
+                              style={{ background: swatch }}
+                            >
+                              {isSelected && (
+                                <Check
+                                  className={`absolute inset-0 m-auto h-6 w-6 ${
+                                    light ? 'text-black' : 'text-white'
+                                  }`}
+                                />
+                              )}
+                            </div>
+                            <span className="text-[10px] leading-tight text-white/80 max-w-[64px] text-center">
+                              {info ? `${info.name}` : label}
+                              {info && <span className="block text-white/40">{info.code}</span>}
+                            </span>
                           </button>
                         );
                       })}

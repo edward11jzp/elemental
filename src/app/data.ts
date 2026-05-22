@@ -261,7 +261,7 @@ export const mockProducts: Product[] = [
   // Women's T-Shirts
   {
     id: 'women-tshirt-1',
-    name: 'Camiseta Negra Esencial Mujer',
+    name: 'Camiseta Negra Esencial Damas',
     category: 'women',
     subcategory: 't-shirts',
     price: 9,
@@ -284,7 +284,7 @@ export const mockProducts: Product[] = [
   },
   {
     id: 'women-tshirt-2',
-    name: 'Camiseta Oversize Mujer',
+    name: 'Camiseta Oversize Damas',
     category: 'women',
     subcategory: 't-shirts',
     price: 9,
@@ -309,7 +309,7 @@ export const mockProducts: Product[] = [
   // Women's Hoodies
   {
     id: 'women-hoodie-1',
-    name: 'Sudadera Premium Mujer',
+    name: 'Sudadera Premium Damas',
     category: 'women',
     subcategory: 'hoodies',
     price: 9,
@@ -334,7 +334,7 @@ export const mockProducts: Product[] = [
   // Women's Joggers
   {
     id: 'women-jogger-1',
-    name: 'Joggers Cónicos Mujer',
+    name: 'Joggers Cónicos Damas',
     category: 'women',
     subcategory: 'joggers',
     price: 9,

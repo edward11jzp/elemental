@@ -2,12 +2,15 @@ import { Outlet } from 'react-router';
 import Navigation from '../components/Navigation';
 import Footer from '../components/Footer';
 import ScrollToTop from '../components/ScrollToTop';
+import { ScrollProgress } from '../components/animations/ScrollProgress';
+import { FloatingWhatsApp } from '../components/FloatingWhatsApp';
 import backgroundImage from 'figma:asset/aea30adc924240815831e87ef3429993d8977f69.png';
 
 export default function Root() {
   return (
     <>
       <ScrollToTop />
+      <ScrollProgress />
       <div className="min-h-screen bg-black text-white relative">
         {/* Background image with blur effect */}
         <div
@@ -32,6 +35,7 @@ export default function Root() {
           </main>
           <Footer />
         </div>
+        <FloatingWhatsApp />
       </div>
     </>
   );

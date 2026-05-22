@@ -1,0 +1,17 @@
+{
+  "permissions": {
+    "allow": [
+      "mcp__Claude_in_Chrome__tabs_context_mcp",
+      "Bash(git clone *)",
+      "Bash(pnpm install *)",
+      "Bash(npm audit *)",
+      "Bash(grep -E \"\\\\.\\(ts|js|json\\)$\")",
+      "mcp__Claude_Preview__preview_start",
+      "Read(//Users/edwardzambranoperez/Downloads/**)",
+      "Bash(mkdir -p /tmp/elemental-make)",
+      "Bash(unzip -q \"/Users/edwardzambranoperez/Downloads/Build website from prompt.make\" -d /tmp/elemental-make/)",
+      "Read(//tmp/**)",
+      "Bash(ls /tmp/elemental-make/images/ | head -30 && echo \"--- count:\" && ls /tmp/elemental-make/images/ | wc -l)"
+    ]
+  }
+}

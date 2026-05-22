@@ -49,12 +49,22 @@ export interface PricingTier {
 
 // Order Types
 export type OrderStatus = 'pending' | 'approved' | 'in_progress' | 'completed' | 'rejected';
-export type PaymentMethod = 'card' | 'zelle' | 'binance' | 'pago_movil' | 'transferencia' | 'pesos_colombianos';
+export type PaymentMethod = 'zelle' | 'binance' | 'pago_movil' | 'transferencia' | 'pesos_colombianos';
+
+export type FulfillmentType = 'delivery' | 'pickup';
 
 export interface Order {
   id: string;
   customerId: string;
   customerName: string;
+  customerEmail?: string;
+  customerPhone?: string;
+  customerAddress?: string;
+  customerCity?: string;
+  customerState?: string; // Estado de Venezuela (solo envío)
+  fulfillmentType?: FulfillmentType;
+  pickupLocationId?: string;
+  pickupLocationName?: string;
   items: CartItem[];
   total: number;
   status: OrderStatus;
@@ -112,7 +122,7 @@ export interface SocialMedia {
 // Payment Info Types
 export interface PaymentInfo {
   id: string;
-  method: Exclude<PaymentMethod, 'card'>; // Todos menos tarjeta
+  method: PaymentMethod;
   active: boolean;
   // Campos comunes
   accountName?: string;

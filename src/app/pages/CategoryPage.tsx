@@ -24,8 +24,8 @@ export default function CategoryPage() {
 
   // Translate category names to Spanish
   const categoryTranslations: Record<string, string> = {
-    'men': 'Hombre',
-    'women': 'Mujer',
+    'men': 'Caballeros',
+    'women': 'Damas',
     'kids': 'Niños',
   };
 

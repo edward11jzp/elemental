@@ -1,22 +1,48 @@
-import { defineConfig } from 'vite'
+import { defineConfig, Plugin } from 'vite'
 import path from 'path'
+import fs from 'fs'
 import tailwindcss from '@tailwindcss/vite'
 import react from '@vitejs/plugin-react'
 
+// Resolve Figma Make's `figma:asset/<hash>.png` imports to local files
+// extracted from the .make archive into src/assets/figma/.
+const ASSETS_DIR = path.resolve(__dirname, './src/assets/figma')
+const TRANSPARENT_PNG =
+  'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNkYAAAAAYAAjCB0C8AAAAASUVORK5CYII='
+
+function figmaAssetResolver(): Plugin {
+  return {
+    name: 'figma-asset-resolver',
+    enforce: 'pre',
+    resolveId(id) {
+      if (!id.startsWith('figma:asset/')) return null
+      const filename = id.slice('figma:asset/'.length)
+      const localPath = path.join(ASSETS_DIR, filename)
+      if (fs.existsSync(localPath)) return localPath
+      return '\0' + id
+    },
+    load(id) {
+      if (id.startsWith('\0figma:asset/')) {
+        return `export default ${JSON.stringify(TRANSPARENT_PNG)};`
+      }
+    },
+  }
+}
+
 export default defineConfig({
   plugins: [
-    // The React and Tailwind plugins are both required for Make, even if
-    // Tailwind is not being actively used – do not remove them
+    figmaAssetResolver(),
     react(),
     tailwindcss(),
   ],
   resolve: {
     alias: {
-      // Alias @ to the src directory
       '@': path.resolve(__dirname, './src'),
     },
+    dedupe: ['react', 'react-dom', 'motion', 'motion/react'],
   },
-
-  // File types to support raw imports. Never add .css, .tsx, or .ts files to this.
+  optimizeDeps: {
+    include: ['react', 'react-dom', 'motion/react'],
+  },
   assetsInclude: ['**/*.svg', '**/*.csv'],
 })

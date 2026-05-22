@@ -1,5 +1,5 @@
 import { Link } from 'react-router';
-import { Search, ShoppingCart, User, Menu, X } from 'lucide-react';
+import { Search, ShoppingCart, Menu, X } from 'lucide-react';
 import { useApp } from '../context';
 import { useState } from 'react';
 import { Button } from './ui/button';
@@ -42,7 +42,7 @@ export default function Navigation() {
               onMouseLeave={() => setMenOpen(false)}
             >
               <button className="text-white hover:text-muted-foreground apple-transition px-3 py-2">
-                Hombre
+                Caballeros
               </button>
               {menOpen && (
                 <div className="absolute left-0 top-full pt-2 w-48 apple-fade-in-up">
@@ -89,7 +89,7 @@ export default function Navigation() {
               onMouseLeave={() => setWomenOpen(false)}
             >
               <button className="text-white hover:text-muted-foreground apple-transition px-3 py-2">
-                Mujer
+                Damas
               </button>
               {womenOpen && (
                 <div className="absolute left-0 top-full pt-2 w-48 apple-fade-in-up">
@@ -203,14 +203,6 @@ export default function Navigation() {
               <Search className="h-5 w-5" />
             </button>
 
-            {/* Account */}
-            <Link
-              to="/account"
-              className="text-white hover:text-muted-foreground transition-colors"
-            >
-              <User className="h-5 w-5" />
-            </Link>
-
             {/* Cart */}
             <Sheet>
               <SheetTrigger asChild>
@@ -252,7 +244,7 @@ export default function Navigation() {
           <div className="md:hidden border-t border-secondary py-4 space-y-4">
             {/* Men Section */}
             <div>
-              <div className="text-white px-4 py-2 font-semibold">Hombre</div>
+              <div className="text-white px-4 py-2 font-semibold">Caballeros</div>
               <Link
                 to="/men/t-shirts"
                 className="block px-8 py-2 text-muted-foreground hover:text-white transition-colors"
@@ -292,7 +284,7 @@ export default function Navigation() {
 
             {/* Women Section */}
             <div>
-              <div className="text-white px-4 py-2 font-semibold">Mujer</div>
+              <div className="text-white px-4 py-2 font-semibold">Damas</div>
               <Link
                 to="/women/t-shirts"
                 className="block px-8 py-2 text-muted-foreground hover:text-white transition-colors"

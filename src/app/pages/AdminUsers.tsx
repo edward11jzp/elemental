@@ -20,8 +20,10 @@ export default function AdminUsers() {
   });
 
   useEffect(() => {
-    if (!currentUser || currentUser.role !== 'admin') {
+    if (!currentUser) {
       navigate('/admin/login');
+    } else if (currentUser.role !== 'admin') {
+      navigate('/admin/orders');
     }
   }, [currentUser, navigate]);
 

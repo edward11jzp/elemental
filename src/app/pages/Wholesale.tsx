@@ -184,12 +184,12 @@ export default function Wholesale() {
           <div className="flex gap-4 justify-center flex-wrap">
             <Link to="/men/t-shirts">
               <Button className="bg-white text-black hover:bg-gray-200 px-8 py-6 text-lg">
-                Ver Productos para Hombres
+                Ver Productos para Caballeros
               </Button>
             </Link>
             <Link to="/women/t-shirts">
               <Button className="bg-white text-black hover:bg-gray-200 px-8 py-6 text-lg">
-                Ver Productos para Mujeres
+                Ver Productos para Damas
               </Button>
             </Link>
           </div>

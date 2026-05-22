@@ -5,12 +5,11 @@ import CategoryPage from "./pages/CategoryPage";
 import ProductDetail from "./pages/ProductDetail";
 import Cart from "./pages/Cart";
 import Checkout from "./pages/Checkout";
-import AccountLogin from "./pages/AccountLogin";
-import AccountDashboard from "./pages/AccountDashboard";
 import Locations from "./pages/Locations";
 import About from "./pages/About";
 import Contact from "./pages/Contact";
 import Wholesale from "./pages/Wholesale";
+import TrackOrder from "./pages/TrackOrder";
 import AdminRoot from "./pages/AdminRoot";
 import AdminLogin from "./pages/AdminLogin";
 import AdminDashboard from "./pages/AdminDashboard";
@@ -40,8 +39,7 @@ export const router = createBrowserRouter([
       { path: "about", Component: About },
       { path: "contact", Component: Contact },
       { path: "wholesale", Component: Wholesale },
-      { path: "account/login", Component: AccountLogin },
-      { path: "account", Component: AccountDashboard },
+      { path: "revisar-pedido", Component: TrackOrder },
       { path: "*", Component: NotFound },
     ],
   },
