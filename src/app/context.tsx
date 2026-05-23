@@ -1,6 +1,10 @@
 import React, { createContext, useContext, useState, useEffect } from 'react';
 import { CartItem, Product, Order, User, Location, SocialMedia, PaymentInfo, SiteSettings } from './types';
-import { mockProducts as initialProducts } from './data';
+import { supabase } from './lib/supabase';
+import * as ordersApi from './lib/orders';
+import * as usersApi from './lib/users';
+import * as productsApi from './lib/products';
+import * as contentApi from './lib/content';
 
 // Context for managing global application state
 
@@ -16,20 +20,22 @@ interface AppContextType {
   
   // Products
   products: Product[];
-  addProduct: (product: Product) => void;
-  updateProduct: (productId: string, updates: Partial<Product>) => void;
-  deleteProduct: (productId: string) => void;
+  addProduct: (product: Omit<Product, 'id'>) => Promise<void>;
+  updateProduct: (productId: string, updates: Partial<Product>) => Promise<void>;
+  deleteProduct: (productId: string) => Promise<void>;
   
   // User & Auth
   currentUser: User | null;
-  login: (email: string, password: string, role?: 'customer' | 'admin') => boolean;
-  logout: () => void;
+  login: (email: string, password: string, role?: 'customer' | 'admin' | 'employee') => Promise<boolean>;
+  logout: () => Promise<void>;
 
   // Users Management
   users: User[];
-  addUser: (user: User) => void;
-  updateUser: (userId: string, updates: Partial<User>) => void;
-  toggleUserActive: (userId: string) => void;
+  refreshUsers: () => Promise<void>;
+  createStaffUser: (email: string, password: string, name: string, role: 'admin' | 'employee', phone?: string) => Promise<void>;
+  updateUser: (userId: string, updates: Partial<User>) => Promise<void>;
+  toggleUserActive: (userId: string) => Promise<void>;
+  deleteUser: (userId: string) => Promise<void>;
 
   // Orders
   orders: Order[];
@@ -38,25 +44,25 @@ interface AppContextType {
   
   // Locations
   locations: Location[];
-  addLocation: (location: Omit<Location, 'id'>) => void;
-  updateLocation: (locationId: string, updates: Partial<Location>) => void;
-  deleteLocation: (locationId: string) => void;
+  addLocation: (location: Omit<Location, 'id'>) => Promise<void>;
+  updateLocation: (locationId: string, updates: Partial<Location>) => Promise<void>;
+  deleteLocation: (locationId: string) => Promise<void>;
 
   // Social Media
   socialMedia: SocialMedia[];
-  addSocialMedia: (social: Omit<SocialMedia, 'id'>) => void;
-  updateSocialMedia: (socialId: string, updates: Partial<SocialMedia>) => void;
-  deleteSocialMedia: (socialId: string) => void;
+  addSocialMedia: (social: Omit<SocialMedia, 'id'>) => Promise<void>;
+  updateSocialMedia: (socialId: string, updates: Partial<SocialMedia>) => Promise<void>;
+  deleteSocialMedia: (socialId: string) => Promise<void>;
 
   // Payment Info
   paymentInfo: PaymentInfo[];
-  addPaymentInfo: (info: Omit<PaymentInfo, 'id'>) => void;
-  updatePaymentInfo: (infoId: string, updates: Partial<PaymentInfo>) => void;
-  deletePaymentInfo: (infoId: string) => void;
+  addPaymentInfo: (info: Omit<PaymentInfo, 'id'>) => Promise<void>;
+  updatePaymentInfo: (infoId: string, updates: Partial<PaymentInfo>) => Promise<void>;
+  deletePaymentInfo: (infoId: string) => Promise<void>;
 
   // Site Settings
   siteSettings: SiteSettings;
-  updateSiteSettings: (settings: Partial<SiteSettings>) => void;
+  updateSiteSettings: (settings: Partial<SiteSettings>) => Promise<void>;
 
   // Search
   searchQuery: string;
@@ -157,50 +163,7 @@ const initialPaymentInfo: PaymentInfo[] = [
   },
 ];
 
-const initialUsers: User[] = [
-  {
-    id: 'user-1',
-    email: 'customer@example.com',
-    name: 'John Doe',
-    role: 'customer',
-    active: true,
-    createdAt: '2026-01-15T10:00:00Z',
-    phone: '0412-1234567',
-  },
-  {
-    id: 'user-2',
-    email: 'customer2@example.com',
-    name: 'María García',
-    role: 'customer',
-    active: true,
-    createdAt: '2026-02-10T10:00:00Z',
-    phone: '0424-9876543',
-  },
-  {
-    id: 'emp-1',
-    email: 'employee@example.com',
-    name: 'Jane Smith',
-    role: 'employee',
-    active: true,
-    createdAt: '2026-02-01T10:00:00Z',
-  },
-  {
-    id: 'emp-2',
-    email: 'employee2@example.com',
-    name: 'Carlos Pérez',
-    role: 'employee',
-    active: true,
-    createdAt: '2026-02-15T10:00:00Z',
-  },
-  {
-    id: 'admin-1',
-    email: 'admin@example.com',
-    name: 'Admin User',
-    role: 'admin',
-    active: true,
-    createdAt: '2026-01-01T10:00:00Z',
-  },
-];
+// Users are loaded from Supabase via lib/users.ts (admin only).
 
 export function AppProvider({ children }: { children: React.ReactNode }) {
   // Initialize cart from localStorage
@@ -220,124 +183,96 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
 
   const [currentUser, setCurrentUser] = useState<User | null>(null);
 
-  // Initialize users from localStorage
-  const [users, setUsers] = useState<User[]>(() => {
-    if (typeof window !== 'undefined') {
-      const savedUsers = localStorage.getItem('elemental_users');
-      if (savedUsers) {
-        try {
-          return JSON.parse(savedUsers);
-        } catch (e) {
-          console.error('Error loading users from localStorage:', e);
-        }
-      }
-    }
-    return initialUsers;
-  });
+  // Sync currentUser with Supabase Auth session on mount and on auth changes.
+  useEffect(() => {
+    let cancelled = false;
+    import('./lib/auth').then(({ getCurrentUser }) => {
+      getCurrentUser().then((u) => { if (!cancelled) setCurrentUser(u); });
+    });
+    const { data: sub } = supabase.auth.onAuthStateChange((_e, session) => {
+      // Defer to next tick so the supabase-js auth lock is released before
+      // we make any further supabase calls (avoids deadlock after signUp).
+      setTimeout(async () => {
+        if (!session) { setCurrentUser(null); return; }
+        const { getCurrentUser } = await import('./lib/auth');
+        const u = await getCurrentUser();
+        if (!cancelled) setCurrentUser(u);
+      }, 0);
+    });
+    return () => { cancelled = true; sub.subscription.unsubscribe(); };
+  }, []);
 
-  // Initialize orders from localStorage
-  const [orders, setOrders] = useState<Order[]>(() => {
-    if (typeof window !== 'undefined') {
-      const savedOrders = localStorage.getItem('elemental_orders');
-      if (savedOrders) {
-        try {
-          return JSON.parse(savedOrders);
-        } catch (e) {
-          console.error('Error loading orders from localStorage:', e);
-        }
-      }
+  // Users come from Supabase (admin only — RLS/RPC enforce). Anon and employees
+  // get an empty list, which is fine since only admins see /admin/users.
+  const [users, setUsers] = useState<User[]>([]);
+
+  const refreshUsers = async () => {
+    try {
+      const list = await usersApi.listUsers();
+      setUsers(list);
+    } catch {
+      // Not authorized (not admin) — clear list silently.
+      setUsers([]);
     }
-    return [];
-  });
+  };
+
+  // Refetch users whenever the auth session changes (admin login → load list).
+  useEffect(() => {
+    refreshUsers();
+    const { data: sub } = supabase.auth.onAuthStateChange(() => { refreshUsers(); });
+    return () => { sub.subscription.unsubscribe(); };
+  }, []);
+
+  // Orders come from Supabase. Anonymous clients can insert but can't list
+  // (RLS blocks them); only authenticated staff sees the full list.
+  const [orders, setOrders] = useState<Order[]>([]);
+
+  // Fetch orders whenever the auth session changes (so admin login loads them).
+  useEffect(() => {
+    let cancelled = false;
+    const refresh = async () => {
+      try {
+        const list = await ordersApi.listOrders();
+        if (!cancelled) setOrders(list);
+      } catch {
+        // Anon users hit RLS and return empty — that's expected.
+        if (!cancelled) setOrders([]);
+      }
+    };
+    refresh();
+    const { data: sub } = supabase.auth.onAuthStateChange(() => { refresh(); });
+    return () => { cancelled = true; sub.subscription.unsubscribe(); };
+  }, []);
 
   const [searchQuery, setSearchQuery] = useState('');
-  const [products, setProducts] = useState<Product[]>(() => {
-    // Check if we need to reload from data.ts due to customPricing addition
-    const needsReload = typeof window !== 'undefined' && !localStorage.getItem('elemental_products_v3');
+  const [products, setProducts] = useState<Product[]>([]);
 
-    if (needsReload) {
-      // Clear old localStorage and mark as updated
-      localStorage.removeItem('elemental_products');
-      localStorage.removeItem('elemental_products_v2');
-      localStorage.setItem('elemental_products_v3', 'true');
-      return initialProducts;
+  const refreshProducts = async () => {
+    try {
+      const list = await productsApi.listProducts();
+      setProducts(list);
+    } catch (err) {
+      console.error('Failed to load products:', err);
     }
+  };
 
-    // Try to load products from localStorage
-    if (typeof window !== 'undefined') {
-      const saved = localStorage.getItem('elemental_products');
-      if (saved) {
-        try {
-          return JSON.parse(saved);
-        } catch (e) {
-          console.error('Error loading products from localStorage:', e);
-        }
-      }
-    }
-    return initialProducts;
+  useEffect(() => {
+    refreshProducts();
+  }, []);
+
+  const [locations, setLocations] = useState<Location[]>([]);
+  const [socialMedia, setSocialMedia] = useState<SocialMedia[]>([]);
+  const [paymentInfo, setPaymentInfo] = useState<PaymentInfo[]>([]);
+  const [siteSettings, setSiteSettings] = useState<SiteSettings>({
+    tagline: 'Redefine Tu Estilo. Atrevido. Minimalista. Sin Disculpas.',
   });
 
-  // Initialize locations from localStorage
-  const [locations, setLocations] = useState<Location[]>(() => {
-    if (typeof window !== 'undefined') {
-      const savedLocations = localStorage.getItem('elemental_locations');
-      if (savedLocations) {
-        try {
-          return JSON.parse(savedLocations);
-        } catch (e) {
-          console.error('Error loading locations from localStorage:', e);
-        }
-      }
-    }
-    return initialLocations;
-  });
-
-  // Initialize social media from localStorage
-  const [socialMedia, setSocialMedia] = useState<SocialMedia[]>(() => {
-    if (typeof window !== 'undefined') {
-      const savedSocialMedia = localStorage.getItem('elemental_social_media');
-      if (savedSocialMedia) {
-        try {
-          return JSON.parse(savedSocialMedia);
-        } catch (e) {
-          console.error('Error loading social media from localStorage:', e);
-        }
-      }
-    }
-    return initialSocialMedia;
-  });
-
-  // Initialize payment info from localStorage
-  const [paymentInfo, setPaymentInfo] = useState<PaymentInfo[]>(() => {
-    if (typeof window !== 'undefined') {
-      const savedPaymentInfo = localStorage.getItem('elemental_payment_info');
-      if (savedPaymentInfo) {
-        try {
-          return JSON.parse(savedPaymentInfo);
-        } catch (e) {
-          console.error('Error loading payment info from localStorage:', e);
-        }
-      }
-    }
-    return initialPaymentInfo;
-  });
-
-  // Initialize site settings from localStorage
-  const [siteSettings, setSiteSettings] = useState<SiteSettings>(() => {
-    if (typeof window !== 'undefined') {
-      const savedSettings = localStorage.getItem('elemental_site_settings');
-      if (savedSettings) {
-        try {
-          return JSON.parse(savedSettings);
-        } catch (e) {
-          console.error('Error loading site settings from localStorage:', e);
-        }
-      }
-    }
-    return {
-      tagline: 'Redefine Tu Estilo. Atrevido. Minimalista. Sin Disculpas.'
-    };
-  });
+  useEffect(() => {
+    contentApi.listLocations().then(setLocations).catch(() => {});
+    contentApi.listSocialMedia().then(setSocialMedia).catch(() => {});
+    contentApi.listPaymentInfo().then(setPaymentInfo).catch(() => {});
+    contentApi.getSiteSettings().then(setSiteSettings).catch(() => {});
+  }, []);
 
   // Save cart to localStorage whenever it changes
   useEffect(() => {
@@ -346,54 +281,11 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     }
   }, [cart]);
 
-  // Save orders to localStorage whenever they change
-  useEffect(() => {
-    if (typeof window !== 'undefined') {
-      localStorage.setItem('elemental_orders', JSON.stringify(orders));
-    }
-  }, [orders]);
+  // Orders are persisted in Supabase, not localStorage.
 
-  // Save users to localStorage whenever they change
-  useEffect(() => {
-    if (typeof window !== 'undefined') {
-      localStorage.setItem('elemental_users', JSON.stringify(users));
-    }
-  }, [users]);
+  // Users are persisted in Supabase (not localStorage).
 
-  // Save locations to localStorage whenever they change
-  useEffect(() => {
-    if (typeof window !== 'undefined') {
-      localStorage.setItem('elemental_locations', JSON.stringify(locations));
-    }
-  }, [locations]);
 
-  // Save social media to localStorage whenever they change
-  useEffect(() => {
-    if (typeof window !== 'undefined') {
-      localStorage.setItem('elemental_social_media', JSON.stringify(socialMedia));
-    }
-  }, [socialMedia]);
-
-  // Save payment info to localStorage whenever they change
-  useEffect(() => {
-    if (typeof window !== 'undefined') {
-      localStorage.setItem('elemental_payment_info', JSON.stringify(paymentInfo));
-    }
-  }, [paymentInfo]);
-
-  // Save site settings to localStorage whenever they change
-  useEffect(() => {
-    if (typeof window !== 'undefined') {
-      localStorage.setItem('elemental_site_settings', JSON.stringify(siteSettings));
-    }
-  }, [siteSettings]);
-
-  // Save products to localStorage whenever they change
-  useEffect(() => {
-    if (typeof window !== 'undefined') {
-      localStorage.setItem('elemental_products', JSON.stringify(products));
-    }
-  }, [products]);
 
   const cartItemCount = cart.reduce((count, item) => count + item.quantity, 0);
 
@@ -454,108 +346,150 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
 
   const clearCart = () => setCart([]);
 
-  const login = (email: string, password: string, role: 'customer' | 'admin' = 'customer'): boolean => {
-    // Mock login - in real app, this would call an API
-    const mockUser: User = {
-      id: role === 'admin' ? 'admin-1' : 'user-1',
-      email,
-      name: role === 'admin' ? 'Admin User' : 'Customer User',
-      role: role === 'admin' ? 'admin' : 'customer',
-      active: true,
-      createdAt: new Date().toISOString(),
-    };
-    setCurrentUser(mockUser);
-    return true;
+  const login = async (
+    email: string,
+    password: string,
+    _role: 'customer' | 'admin' | 'employee' = 'customer',
+  ): Promise<boolean> => {
+    // Real auth via Supabase. The user's role comes from public.profiles, not
+    // from the `_role` argument (which is now ignored — kept for API compat).
+    try {
+      const { signIn } = await import('./lib/auth');
+      const user = await signIn(email, password);
+      setCurrentUser(user);
+      return true;
+    } catch (err) {
+      console.error('Login failed:', err);
+      return false;
+    }
   };
 
-  const logout = () => {
+  const logout = async (): Promise<void> => {
+    const { signOut } = await import('./lib/auth');
+    await signOut();
     setCurrentUser(null);
   };
 
-  const addUser = (user: User) => {
-    setUsers(prev => [...prev, user]);
+  const createStaffUser = async (
+    email: string,
+    password: string,
+    name: string,
+    role: 'admin' | 'employee',
+    phone?: string,
+  ) => {
+    await usersApi.createStaff(email, password, name, role, phone);
+    await refreshUsers();
   };
 
-  const updateUser = (userId: string, updates: Partial<User>) => {
-    setUsers(prev => prev.map(user =>
-      user.id === userId ? { ...user, ...updates } : user
-    ));
+  const updateUser = async (userId: string, updates: Partial<User>) => {
+    if (updates.role || updates.name !== undefined || updates.phone !== undefined) {
+      await usersApi.setUserRole(
+        userId,
+        (updates.role ?? users.find(u => u.id === userId)?.role ?? 'employee') as any,
+        updates.name,
+        updates.phone,
+      );
+    }
+    if (updates.active !== undefined) {
+      await usersApi.setUserActive(userId, updates.active);
+    }
+    await refreshUsers();
   };
 
-  const toggleUserActive = (userId: string) => {
-    setUsers(prev => prev.map(user =>
-      user.id === userId ? { ...user, active: !user.active } : user
-    ));
+  const toggleUserActive = async (userId: string) => {
+    const u = users.find(x => x.id === userId);
+    if (!u) return;
+    await usersApi.setUserActive(userId, !u.active);
+    await refreshUsers();
+  };
+
+  const deleteUser = async (userId: string) => {
+    await usersApi.deleteUser(userId);
+    await refreshUsers();
   };
 
   const addOrder = (order: Order) => {
+    // Optimistic local insert so the confirmation screen sees it instantly.
     setOrders(prev => [order, ...prev]);
+    // Persist to Supabase. If RLS rejects (shouldn't, insert is public) we log
+    // but don't crash the customer-facing flow.
+    ordersApi.createOrder(order).catch((err) => {
+      console.error('Order insert failed:', err);
+    });
   };
 
   const updateOrderStatus = (orderId: string, status: Order['status']) => {
     setOrders(prev => prev.map(order =>
       order.id === orderId ? { ...order, status, updatedAt: new Date().toISOString() } : order
     ));
+    ordersApi.updateStatus(orderId, status).catch((err) => {
+      console.error('Order status update failed:', err);
+    });
   };
 
-  const addProduct = (product: Product) => {
-    setProducts(prev => [...prev, product]);
+  const addProduct = async (product: Omit<Product, 'id'>) => {
+    await productsApi.createProduct(product);
+    await refreshProducts();
   };
 
-  const updateProduct = (productId: string, updates: Partial<Product>) => {
-    setProducts(prev => prev.map(product =>
-      product.id === productId ? { ...product, ...updates } : product
-    ));
+  const updateProduct = async (productId: string, updates: Partial<Product>) => {
+    await productsApi.updateProduct(productId, updates);
+    await refreshProducts();
   };
 
-  const deleteProduct = (productId: string) => {
-    setProducts(prev => prev.filter(product => product.id !== productId));
+  const deleteProduct = async (productId: string) => {
+    await productsApi.deleteProduct(productId);
+    await refreshProducts();
   };
 
-  const addLocation = (location: Omit<Location, 'id'>) => {
-    setLocations(prev => [...prev, { ...location, id: `loc-${prev.length + 1}` }]);
+  const addLocation = async (location: Omit<Location, 'id'>) => {
+    await contentApi.createLocation(location);
+    contentApi.listLocations().then(setLocations).catch(() => {});
   };
 
-  const updateLocation = (locationId: string, updates: Partial<Location>) => {
-    setLocations(prev => prev.map(location =>
-      location.id === locationId ? { ...location, ...updates } : location
-    ));
+  const updateLocation = async (locationId: string, updates: Partial<Location>) => {
+    await contentApi.updateLocation(locationId, updates);
+    contentApi.listLocations().then(setLocations).catch(() => {});
   };
 
-  const deleteLocation = (locationId: string) => {
-    setLocations(prev => prev.filter(location => location.id !== locationId));
+  const deleteLocation = async (locationId: string) => {
+    await contentApi.deleteLocation(locationId);
+    contentApi.listLocations().then(setLocations).catch(() => {});
   };
 
-  const addSocialMedia = (social: Omit<SocialMedia, 'id'>) => {
-    setSocialMedia(prev => [...prev, { ...social, id: `social-${prev.length + 1}` }]);
+  const addSocialMedia = async (social: Omit<SocialMedia, 'id'>) => {
+    await contentApi.createSocialMedia(social);
+    contentApi.listSocialMedia().then(setSocialMedia).catch(() => {});
   };
 
-  const updateSocialMedia = (socialId: string, updates: Partial<SocialMedia>) => {
-    setSocialMedia(prev => prev.map(social =>
-      social.id === socialId ? { ...social, ...updates } : social
-    ));
+  const updateSocialMedia = async (socialId: string, updates: Partial<SocialMedia>) => {
+    await contentApi.updateSocialMedia(socialId, updates);
+    contentApi.listSocialMedia().then(setSocialMedia).catch(() => {});
   };
 
-  const deleteSocialMedia = (socialId: string) => {
-    setSocialMedia(prev => prev.filter(social => social.id !== socialId));
+  const deleteSocialMedia = async (socialId: string) => {
+    await contentApi.deleteSocialMedia(socialId);
+    contentApi.listSocialMedia().then(setSocialMedia).catch(() => {});
   };
 
-  const addPaymentInfo = (info: Omit<PaymentInfo, 'id'>) => {
-    setPaymentInfo(prev => [...prev, { ...info, id: `payment-${Date.now()}` }]);
+  const addPaymentInfo = async (info: Omit<PaymentInfo, 'id'>) => {
+    await contentApi.createPaymentInfo(info);
+    contentApi.listPaymentInfo().then(setPaymentInfo).catch(() => {});
   };
 
-  const updatePaymentInfo = (infoId: string, updates: Partial<PaymentInfo>) => {
-    setPaymentInfo(prev => prev.map(info =>
-      info.id === infoId ? { ...info, ...updates } : info
-    ));
+  const updatePaymentInfo = async (infoId: string, updates: Partial<PaymentInfo>) => {
+    await contentApi.updatePaymentInfo(infoId, updates);
+    contentApi.listPaymentInfo().then(setPaymentInfo).catch(() => {});
   };
 
-  const deletePaymentInfo = (infoId: string) => {
-    setPaymentInfo(prev => prev.filter(info => info.id !== infoId));
+  const deletePaymentInfo = async (infoId: string) => {
+    await contentApi.deletePaymentInfo(infoId);
+    contentApi.listPaymentInfo().then(setPaymentInfo).catch(() => {});
   };
 
-  const updateSiteSettings = (settings: Partial<SiteSettings>) => {
+  const updateSiteSettings = async (settings: Partial<SiteSettings>) => {
     setSiteSettings(prev => ({ ...prev, ...settings }));
+    await contentApi.updateSiteSettings(settings);
   };
 
   return (
@@ -576,9 +510,11 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         login,
         logout,
         users,
-        addUser,
+        refreshUsers,
+        createStaffUser,
         updateUser,
         toggleUserActive,
+        deleteUser,
         orders,
         addOrder,
         updateOrderStatus,
