@@ -1,0 +1,251 @@
+/* Apple-style Smooth Transitions */
+
+/* Smooth scroll behavior for entire page */
+html {
+  scroll-behavior: smooth;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+/* Apple's signature easing function */
+:root {
+  --ease-out-expo: cubic-bezier(0.16, 1, 0.3, 1);
+  --ease-in-out-cubic: cubic-bezier(0.645, 0.045, 0.355, 1);
+  --ease-out-quint: cubic-bezier(0.22, 1, 0.36, 1);
+  --spring: cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+
+/* Fade In Animation - Smooth and Elegant */
+@keyframes apple-fade-in {
+  from {
+    opacity: 0;
+    transform: translateY(30px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes apple-fade-in-up {
+  from {
+    opacity: 0;
+    transform: translateY(50px) scale(0.95);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+@keyframes apple-fade-in-scale {
+  from {
+    opacity: 0;
+    transform: scale(0.9);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
+/* Slide animations */
+@keyframes apple-slide-in-right {
+  from {
+    opacity: 0;
+    transform: translateX(-40px);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(0);
+  }
+}
+
+@keyframes apple-slide-in-left {
+  from {
+    opacity: 0;
+    transform: translateX(40px);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(0);
+  }
+}
+
+/* Animation classes */
+.apple-fade-in {
+  animation: apple-fade-in 1s var(--ease-out-expo) forwards;
+  opacity: 0;
+  will-change: opacity, transform;
+}
+
+.apple-fade-in-up {
+  animation: apple-fade-in-up 1.2s var(--ease-out-expo) forwards;
+  opacity: 0;
+  will-change: opacity, transform;
+}
+
+.apple-fade-in-scale {
+  animation: apple-fade-in-scale 0.8s var(--ease-out-expo) forwards;
+  opacity: 0;
+  will-change: opacity, transform;
+}
+
+.apple-slide-in-right {
+  animation: apple-slide-in-right 1s var(--ease-out-expo) forwards;
+  opacity: 0;
+  will-change: opacity, transform;
+}
+
+.apple-slide-in-left {
+  animation: apple-slide-in-left 1s var(--ease-out-expo) forwards;
+  opacity: 0;
+  will-change: opacity, transform;
+}
+
+/* Stagger delays for sequential animations */
+.apple-stagger-1 { animation-delay: 0.1s; }
+.apple-stagger-2 { animation-delay: 0.2s; }
+.apple-stagger-3 { animation-delay: 0.3s; }
+.apple-stagger-4 { animation-delay: 0.4s; }
+.apple-stagger-5 { animation-delay: 0.5s; }
+.apple-stagger-6 { animation-delay: 0.6s; }
+
+/* Enhanced transition utilities */
+.apple-transition {
+  transition-duration: 0.5s;
+  transition-timing-function: var(--ease-out-expo);
+}
+
+.apple-transition-fast {
+  transition-duration: 0.3s;
+  transition-timing-function: var(--ease-out-expo);
+}
+
+.apple-transition-slow {
+  transition-duration: 0.8s;
+  transition-timing-function: var(--ease-out-expo);
+}
+
+/* Hover effects with smooth transitions */
+.apple-hover-lift {
+  transition: transform 0.5s var(--ease-out-expo), box-shadow 0.5s var(--ease-out-expo);
+}
+
+.apple-hover-lift:hover {
+  transform: translateY(-8px);
+}
+
+.apple-hover-scale {
+  transition: transform 0.5s var(--ease-out-expo);
+}
+
+.apple-hover-scale:hover {
+  transform: scale(1.05);
+}
+
+/* Card hover effect like Apple product cards */
+.apple-card {
+  transition: all 0.5s var(--ease-out-expo);
+  will-change: transform, box-shadow;
+}
+
+.apple-card:hover {
+  transform: translateY(-4px) scale(1.02);
+}
+
+/* Button press effect */
+.apple-button {
+  transition: all 0.2s var(--ease-out-expo);
+}
+
+.apple-button:active {
+  transform: scale(0.96);
+}
+
+/* Smooth opacity transitions */
+.apple-opacity {
+  transition: opacity 0.6s var(--ease-out-expo);
+}
+
+/* Link underline animation like Apple */
+.apple-link {
+  position: relative;
+  transition: color 0.3s var(--ease-out-expo);
+}
+
+.apple-link::after {
+  content: '';
+  position: absolute;
+  bottom: -2px;
+  left: 0;
+  width: 100%;
+  height: 1px;
+  background: currentColor;
+  transform: scaleX(0);
+  transform-origin: right;
+  transition: transform 0.4s var(--ease-out-expo);
+}
+
+.apple-link:hover::after {
+  transform: scaleX(1);
+  transform-origin: left;
+}
+
+/* Smooth background transitions */
+.apple-bg-transition {
+  transition: background-color 0.5s var(--ease-out-expo);
+}
+
+/* Image reveal effect */
+.apple-image-reveal {
+  overflow: hidden;
+}
+
+.apple-image-reveal img {
+  transform: scale(1.1);
+  transition: transform 1.2s var(--ease-out-expo);
+}
+
+.apple-image-reveal:hover img {
+  transform: scale(1);
+}
+
+/* Blur in animation */
+@keyframes apple-blur-in {
+  from {
+    opacity: 0;
+    filter: blur(20px);
+  }
+  to {
+    opacity: 1;
+    filter: blur(0);
+  }
+}
+
+.apple-blur-in {
+  animation: apple-blur-in 1s var(--ease-out-expo) forwards;
+  opacity: 0;
+}
+
+/* Hardware acceleration for better performance */
+.apple-accelerate {
+  transform: translateZ(0);
+  backface-visibility: hidden;
+  perspective: 1000px;
+}
+
+/* Reduce motion for accessibility */
+@media (prefers-reduced-motion: reduce) {
+  html {
+    scroll-behavior: auto;
+  }
+  
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+}
