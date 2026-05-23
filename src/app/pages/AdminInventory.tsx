@@ -4,7 +4,7 @@ import { useEffect, useState } from 'react';
 import AdminNav from '../components/AdminNav';
 import { Button } from '../components/ui/button';
 import { Input } from '../components/ui/input';
-import { Pencil, Trash2, Upload, X, Star, ChevronDown, ChevronUp } from 'lucide-react';
+import { Pencil, Trash2, Upload, X, Star, ChevronDown, ChevronUp, Plus, Ruler } from 'lucide-react';
 import {
   Dialog,
   DialogContent,
@@ -16,52 +16,9 @@ import {
 import { Label } from '../components/ui/label';
 import { Textarea } from '../components/ui/textarea';
 import { toast } from 'sonner';
-
-const AVAILABLE_COLORS = [
-  { name: 'Negro', value: '#000000' },
-  { name: 'Blanco', value: '#FFFFFF' },
-  { name: 'Gris', value: '#808080' },
-  { name: 'Gris Claro', value: '#D3D3D3' },
-  { name: 'Gris Oscuro', value: '#404040' },
-  { name: 'Carbón', value: '#36454F' },
-  { name: 'Rojo', value: '#FF0000' },
-  { name: 'Rojo Oscuro', value: '#8B0000' },
-  { name: 'Rojo Vino', value: '#722F37' },
-  { name: 'Carmesí', value: '#DC143C' },
-  { name: 'Coral', value: '#FF7F50' },
-  { name: 'Azul', value: '#0000FF' },
-  { name: 'Azul Marino', value: '#000080' },
-  { name: 'Azul Cielo', value: '#87CEEB' },
-  { name: 'Azul Real', value: '#4169E1' },
-  { name: 'Azul Eléctrico', value: '#7DF9FF' },
-  { name: 'Azul Petróleo', value: '#008B8B' },
-  { name: 'Verde', value: '#00FF00' },
-  { name: 'Verde Oscuro', value: '#006400' },
-  { name: 'Verde Lima', value: '#32CD32' },
-  { name: 'Verde Oliva', value: '#808000' },
-  { name: 'Verde Menta', value: '#98FF98' },
-  { name: 'Verde Esmeralda', value: '#50C878' },
-  { name: 'Amarillo', value: '#FFFF00' },
-  { name: 'Amarillo Mostaza', value: '#FFDB58' },
-  { name: 'Naranja', value: '#FFA500' },
-  { name: 'Naranja Quemado', value: '#CC5500' },
-  { name: 'Rosa', value: '#FFC0CB' },
-  { name: 'Rosa Fucsia', value: '#FF00FF' },
-  { name: 'Rosa Pastel', value: '#FFD1DC' },
-  { name: 'Morado', value: '#800080' },
-  { name: 'Púrpura', value: '#A020F0' },
-  { name: 'Lavanda', value: '#E6E6FA' },
-  { name: 'Índigo', value: '#4B0082' },
-  { name: 'Marrón', value: '#8B4513' },
-  { name: 'Marrón Claro', value: '#A52A2A' },
-  { name: 'Café', value: '#6F4E37' },
-  { name: 'Beige', value: '#F5F5DC' },
-  { name: 'Crema', value: '#FFFDD0' },
-  { name: 'Turquesa', value: '#40E0D0' },
-  { name: 'Cian', value: '#00FFFF' },
-  { name: 'Dorado', value: '#FFD700' },
-  { name: 'Plateado', value: '#C0C0C0' },
-];
+import { PALETTE as AVAILABLE_COLORS } from '../colors';
+import { loadSizes, saveCustomSize, deleteCustomSize, groupSizes, GROUP_LABELS, type Size, type SizeGroup } from '../sizes';
+import { loadSubcategories, saveCustomSubcategory, deleteCustomSubcategory, isDefaultSubcategory, type Subcategory } from '../subcategories';
 
 export default function AdminInventory() {
   const { currentUser, products, addProduct, updateProduct, deleteProduct } = useApp();
@@ -84,6 +41,7 @@ export default function AdminInventory() {
     image: '',
     allowCustom: false,
     colorPalette: [] as string[],
+    sizes: [] as string[],
     customizationImages: {
       front: '',
       back: '',
@@ -92,6 +50,14 @@ export default function AdminInventory() {
   });
   const [isColorDropdownOpen, setIsColorDropdownOpen] = useState(false);
   const [isEditColorDropdownOpen, setIsEditColorDropdownOpen] = useState(false);
+  const [isSizesDropdownOpen, setIsSizesDropdownOpen] = useState(false);
+  const [isEditSizesDropdownOpen, setIsEditSizesDropdownOpen] = useState(false);
+  const [availableSizes, setAvailableSizes] = useState<Size[]>(() => loadSizes());
+  const [newSizeLabel, setNewSizeLabel] = useState('');
+  const [newSizeGroup, setNewSizeGroup] = useState<SizeGroup>('otras');
+  const [availableSubcategories, setAvailableSubcategories] = useState<Subcategory[]>(() => loadSubcategories());
+  const [isManageSubcategoriesOpen, setIsManageSubcategoriesOpen] = useState(false);
+  const [newSubcategoryLabel, setNewSubcategoryLabel] = useState('');
   const [customImagePreviews, setCustomImagePreviews] = useState({
     front: '',
     back: '',
@@ -99,8 +65,10 @@ export default function AdminInventory() {
   });
 
   useEffect(() => {
-    if (!currentUser || currentUser.role !== 'admin') {
+    if (!currentUser) {
       navigate('/admin/login');
+    } else if (currentUser.role !== 'admin') {
+      navigate('/admin/orders');
     }
   }, [currentUser, navigate]);
 
@@ -112,7 +80,7 @@ export default function AdminInventory() {
     return matchesSearch && matchesCategory;
   });
 
-  const handleAddProduct = () => {
+  const handleAddProduct = async () => {
     // Validation
     if (!newProduct.name.trim()) {
       toast.error('Por favor ingresa un nombre de producto');
@@ -135,20 +103,18 @@ export default function AdminInventory() {
       return;
     }
 
-    // Create product object
     const productToAdd = {
-      id: `product-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
       name: newProduct.name,
-      category: newProduct.category as 'men' | 'women' | 'hats' | 'hoodies' | 'joggers',
+      category: newProduct.category as 'men' | 'women' | 'kids',
       subcategory: newProduct.subcategory,
-      price: parseFloat(newProduct.retailPrice), // Keep for backwards compatibility
+      price: parseFloat(newProduct.retailPrice),
       retailPrice: parseFloat(newProduct.retailPrice),
       wholesalePrice: parseFloat(newProduct.wholesalePrice),
       image: newProduct.image,
       images: [newProduct.image],
       description: newProduct.description,
-      sizes: ['S', 'M', 'L', 'XL', '2XL'],
-      colors: ['Black', 'White', 'Grey'],
+      sizes: newProduct.sizes.length > 0 ? newProduct.sizes : ['S', 'M', 'L', 'XL', '2XL'],
+      colors: [],
       colorPalette: newProduct.colorPalette,
       stock: parseInt(newProduct.stock),
       allowCustom: newProduct.allowCustom,
@@ -157,10 +123,13 @@ export default function AdminInventory() {
       customizationImages: newProduct.customizationImages,
     };
 
-    // Add product to context
-    addProduct(productToAdd);
-
-    toast.success('¡Producto agregado exitosamente!');
+    try {
+      await addProduct(productToAdd);
+      toast.success('¡Producto agregado exitosamente!');
+    } catch (err: any) {
+      toast.error(err?.message ?? 'No se pudo guardar el producto');
+      return;
+    }
     setIsAddModalOpen(false);
     setImagePreview('');
     setCustomImagePreviews({ front: '', back: '', sleeves: '' });
@@ -176,6 +145,7 @@ export default function AdminInventory() {
       image: '',
       allowCustom: false,
       colorPalette: [],
+      sizes: [],
       customizationImages: {
         front: '',
         back: '',
@@ -184,7 +154,200 @@ export default function AdminInventory() {
     });
   };
 
-  const handleEditProduct = () => {
+  // Toggle a size selection in newProduct
+  const toggleNewSize = (value: string) => {
+    setNewProduct((prev) => ({
+      ...prev,
+      sizes: prev.sizes.includes(value)
+        ? prev.sizes.filter((s) => s !== value)
+        : [...prev.sizes, value],
+    }));
+  };
+
+  // Toggle a size selection in editingProduct
+  const toggleEditSize = (value: string) => {
+    const current: string[] = Array.isArray(editingProduct?.sizes) ? editingProduct.sizes : [];
+    setEditingProduct({
+      ...editingProduct,
+      sizes: current.includes(value) ? current.filter((s) => s !== value) : [...current, value],
+    });
+  };
+
+  // Persist a new global size (admin can extend the catalog at any time)
+  const handleAddCustomSize = () => {
+    const value = newSizeLabel.trim();
+    if (!value) return;
+    if (availableSizes.some((s) => s.value.toLowerCase() === value.toLowerCase())) {
+      toast.error('Esa talla ya existe');
+      return;
+    }
+    const size: Size = { value, label: value, group: newSizeGroup };
+    saveCustomSize(size);
+    setAvailableSizes(loadSizes());
+    setNewSizeLabel('');
+    toast.success(`Talla "${value}" agregada al catálogo`);
+  };
+
+  const handleDeleteCustomSize = (value: string) => {
+    deleteCustomSize(value);
+    setAvailableSizes(loadSizes());
+    toast.success('Talla eliminada del catálogo');
+  };
+
+  const handleAddCustomSubcategory = () => {
+    const created = saveCustomSubcategory(newSubcategoryLabel);
+    if (!created) {
+      toast.error('Nombre inválido o subcategoría ya existe');
+      return;
+    }
+    setAvailableSubcategories(loadSubcategories());
+    setNewSubcategoryLabel('');
+    toast.success(`Subcategoría "${created.label}" agregada`);
+  };
+
+  const handleDeleteCustomSubcategory = (value: string) => {
+    if (isDefaultSubcategory(value)) {
+      toast.error('No se puede eliminar una subcategoría por defecto');
+      return;
+    }
+    deleteCustomSubcategory(value);
+    setAvailableSubcategories(loadSubcategories());
+    toast.success('Subcategoría eliminada');
+  };
+
+  // Custom-size identifier: anything not in the default master list
+  const isCustomSize = (value: string) => {
+    const defaults = new Set([
+      'Talla Única','2-4','4-6','6-8','8-10','10-12','12-14','14-16',
+      'XS','S','M','L','XL','2XL','3XL','4XL',
+    ]);
+    return !defaults.has(value);
+  };
+
+  // Renders the size picker (used in Add and Edit modals)
+  const renderSizesPicker = (
+    selected: string[],
+    onToggle: (v: string) => void,
+    isOpen: boolean,
+    setOpen: (v: boolean) => void,
+  ) => {
+    const grouped = groupSizes(availableSizes);
+    const order: SizeGroup[] = ['unica', 'ninos', 'adultos', 'otras'];
+
+    return (
+      <div>
+        <Label>Tallas Disponibles</Label>
+        <button
+          type="button"
+          onClick={() => setOpen(!isOpen)}
+          className="w-full flex items-center justify-between bg-secondary border border-border rounded-md px-4 py-3 text-white hover:bg-secondary/80 transition-colors"
+        >
+          <span className="text-sm">
+            {selected.length > 0
+              ? `${selected.length} tallas seleccionadas`
+              : 'Seleccionar tallas'}
+          </span>
+          {isOpen ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
+        </button>
+
+        {isOpen && (
+          <div className="mt-2 bg-secondary border border-border rounded-md p-4 max-h-[360px] overflow-y-auto space-y-4">
+            {order.map((g) =>
+              grouped[g].length > 0 ? (
+                <div key={g}>
+                  <p className="text-xs uppercase tracking-wider text-muted-foreground mb-2">{GROUP_LABELS[g]}</p>
+                  <div className="grid grid-cols-3 gap-2">
+                    {grouped[g].map((size) => {
+                      const isSelected = selected.includes(size.value);
+                      const custom = isCustomSize(size.value);
+                      return (
+                        <div
+                          key={size.value}
+                          className={`group flex items-center justify-between rounded-md px-2 py-2 border transition-colors cursor-pointer ${
+                            isSelected
+                              ? 'border-white bg-white/10'
+                              : 'border-border bg-black/30 hover:border-white/40'
+                          }`}
+                          onClick={() => onToggle(size.value)}
+                        >
+                          <span className="text-sm text-white">{size.label}</span>
+                          {custom && (
+                            <button
+                              type="button"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                handleDeleteCustomSize(size.value);
+                              }}
+                              className="opacity-0 group-hover:opacity-100 text-red-400 hover:text-red-300"
+                              title="Eliminar del catálogo"
+                            >
+                              <X className="h-3.5 w-3.5" />
+                            </button>
+                          )}
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+              ) : null
+            )}
+
+            {/* Add new size */}
+            <div className="border-t border-border pt-4">
+              <p className="text-xs uppercase tracking-wider text-muted-foreground mb-2">
+                Agregar nueva talla al catálogo
+              </p>
+              <div className="flex gap-2 items-center">
+                <Input
+                  value={newSizeLabel}
+                  onChange={(e) => setNewSizeLabel(e.target.value)}
+                  placeholder="Ej: 5XL, 16-18, Bebé..."
+                  className="bg-black/40 border-border text-white"
+                />
+                <select
+                  value={newSizeGroup}
+                  onChange={(e) => setNewSizeGroup(e.target.value as SizeGroup)}
+                  className="bg-black/40 border border-border rounded-md px-2 py-2 text-white text-sm"
+                >
+                  <option value="unica">Única</option>
+                  <option value="ninos">Niños</option>
+                  <option value="adultos">Adultos</option>
+                  <option value="otras">Otras</option>
+                </select>
+                <Button
+                  type="button"
+                  onClick={handleAddCustomSize}
+                  className="bg-white text-black hover:bg-gray-200"
+                >
+                  <Plus className="h-4 w-4" />
+                </Button>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {selected.length > 0 && (
+          <div className="mt-3">
+            <p className="text-xs text-muted-foreground mb-2">
+              Tallas seleccionadas ({selected.length}):
+            </p>
+            <div className="flex gap-2 flex-wrap">
+              {selected.map((v) => (
+                <span
+                  key={v}
+                  className="bg-white/10 border border-white/20 text-white text-sm px-3 py-1 rounded-md"
+                >
+                  {v}
+                </span>
+              ))}
+            </div>
+          </div>
+        )}
+      </div>
+    );
+  };
+
+  const handleEditProduct = async () => {
     // Validation
     if (!editingProduct.name.trim()) {
       toast.error('Por favor ingresa un nombre de producto');
@@ -210,24 +373,30 @@ export default function AdminInventory() {
       return;
     }
 
-    // Update product in context
-    updateProduct(editingProduct.id, {
-      name: editingProduct.name,
-      category: editingProduct.category,
-      subcategory: editingProduct.subcategory,
-      price: typeof retailPrice === 'string' ? parseFloat(retailPrice) : retailPrice,
-      retailPrice: typeof retailPrice === 'string' ? parseFloat(retailPrice) : retailPrice,
-      wholesalePrice: typeof wholesalePrice === 'string' ? parseFloat(wholesalePrice) : wholesalePrice,
-      image: editingProduct.image,
-      images: [editingProduct.image],
-      description: editingProduct.description,
-      stock: typeof editingProduct.stock === 'string' ? parseInt(editingProduct.stock) : editingProduct.stock,
-      allowCustom: editingProduct.allowCustom,
-      colorPalette: Array.isArray(editingProduct.colorPalette) ? editingProduct.colorPalette : [],
-      customizationImages: editingProduct.customizationImages,
-    });
-
-    toast.success('¡Producto actualizado exitosamente!');
+    try {
+      await updateProduct(editingProduct.id, {
+        name: editingProduct.name,
+        category: editingProduct.category,
+        subcategory: editingProduct.subcategory,
+        price: typeof retailPrice === 'string' ? parseFloat(retailPrice) : retailPrice,
+        retailPrice: typeof retailPrice === 'string' ? parseFloat(retailPrice) : retailPrice,
+        wholesalePrice: typeof wholesalePrice === 'string' ? parseFloat(wholesalePrice) : wholesalePrice,
+        image: editingProduct.image,
+        images: [editingProduct.image],
+        description: editingProduct.description,
+        stock: typeof editingProduct.stock === 'string' ? parseInt(editingProduct.stock) : editingProduct.stock,
+        allowCustom: editingProduct.allowCustom,
+        colorPalette: Array.isArray(editingProduct.colorPalette) ? editingProduct.colorPalette : [],
+        sizes: Array.isArray(editingProduct.sizes) && editingProduct.sizes.length > 0
+          ? editingProduct.sizes
+          : ['S', 'M', 'L', 'XL', '2XL'],
+        customizationImages: editingProduct.customizationImages,
+      });
+      toast.success('¡Producto actualizado exitosamente!');
+    } catch (err: any) {
+      toast.error(err?.message ?? 'No se pudo actualizar el producto');
+      return;
+    }
     setIsEditModalOpen(false);
     setImagePreview('');
     setCustomImagePreviews({ front: '', back: '', sleeves: '' });
@@ -314,8 +483,11 @@ export default function AdminInventory() {
 
   const handleDeleteProduct = (productId: string) => {
     if (confirm('¿Estás seguro de que deseas eliminar este producto?')) {
-      deleteProduct(productId);
-      toast.success('Producto eliminado exitosamente');
+      deleteProduct(productId).then(() => {
+        toast.success('Producto eliminado exitosamente');
+      }).catch((err: any) => {
+        toast.error(err?.message ?? 'No se pudo eliminar el producto');
+      });
     }
   };
 
@@ -363,8 +535,8 @@ export default function AdminInventory() {
               className="bg-secondary border border-border rounded-md px-4 py-2 text-white"
             >
               <option value="all">Todas las Categorías</option>
-              <option value="men">Hombre</option>
-              <option value="women">Mujer</option>
+              <option value="men">Caballeros</option>
+              <option value="women">Damas</option>
               <option value="kids">Niños</option>
             </select>
           </div>
@@ -550,25 +722,32 @@ export default function AdminInventory() {
                     onChange={(e) => setNewProduct({ ...newProduct, category: e.target.value })}
                     className="w-full bg-secondary border border-border rounded-md px-4 py-2 text-white"
                   >
-                    <option value="men">Hombre</option>
-                    <option value="women">Mujer</option>
+                    <option value="men">Caballeros</option>
+                    <option value="women">Damas</option>
                     <option value="kids">Niños</option>
                   </select>
                 </div>
 
                 <div>
-                  <Label htmlFor="add-subcategory">Subcategoría</Label>
+                  <div className="flex items-center justify-between mb-1">
+                    <Label htmlFor="add-subcategory">Subcategoría</Label>
+                    <button
+                      type="button"
+                      onClick={() => setIsManageSubcategoriesOpen(true)}
+                      className="text-xs text-white/70 hover:text-white flex items-center gap-1"
+                    >
+                      <Plus className="h-3 w-3" /> Gestionar
+                    </button>
+                  </div>
                   <select
                     id="add-subcategory"
                     value={newProduct.subcategory}
                     onChange={(e) => setNewProduct({ ...newProduct, subcategory: e.target.value })}
                     className="w-full bg-secondary border border-border rounded-md px-4 py-2 text-white"
                   >
-                    <option value="t-shirts">Camisetas</option>
-                    <option value="polos">Polos</option>
-                    <option value="gorras">Gorras</option>
-                    <option value="hoodies">Hoodies</option>
-                    <option value="joggers">Joggers</option>
+                    {availableSubcategories.map((s) => (
+                      <option key={s.value} value={s.value}>{s.label}</option>
+                    ))}
                   </select>
                 </div>
               </div>
@@ -642,10 +821,10 @@ export default function AdminInventory() {
                             className="w-4 h-4"
                           />
                           <div
-                            className="w-6 h-6 rounded border-2 border-white/20"
-                            style={{ backgroundColor: color.value }}
+                            className="w-6 h-6 rounded border-2 border-white/20 shrink-0"
+                            style={{ background: color.swatch }}
                           />
-                          <span className="text-sm text-white">{color.name}</span>
+                          <span className="text-sm text-white">{color.name} - {color.code}</span>
                         </label>
                       ))}
                     </div>
@@ -664,8 +843,8 @@ export default function AdminInventory() {
                           <div
                             key={index}
                             className="w-10 h-10 rounded border-2 border-white/30"
-                            style={{ backgroundColor: colorValue }}
-                            title={colorInfo?.name || colorValue}
+                            style={{ background: colorInfo?.swatch ?? colorValue }}
+                            title={colorInfo ? `${colorInfo.name} - ${colorInfo.code}` : colorValue}
                           />
                         );
                       })}
@@ -673,6 +852,13 @@ export default function AdminInventory() {
                   </div>
                 )}
               </div>
+
+              {renderSizesPicker(
+                newProduct.sizes,
+                toggleNewSize,
+                isSizesDropdownOpen,
+                setIsSizesDropdownOpen,
+              )}
 
               <div>
                 <Label htmlFor="add-image">URL de la Imagen</Label>
@@ -683,7 +869,7 @@ export default function AdminInventory() {
                   className="bg-secondary border-border text-white"
                   placeholder="https://example.com/image.jpg"
                 />
-                
+
                 <div className="mt-4">
                   <Label htmlFor="add-imageUpload">O Subir Imagen</Label>
                   <div className="mt-2">
@@ -1008,25 +1194,32 @@ export default function AdminInventory() {
                     onChange={(e) => setEditingProduct({ ...editingProduct, category: e.target.value })}
                     className="w-full bg-secondary border border-border rounded-md px-4 py-2 text-white"
                   >
-                    <option value="men">Hombre</option>
-                    <option value="women">Mujer</option>
+                    <option value="men">Caballeros</option>
+                    <option value="women">Damas</option>
                     <option value="kids">Niños</option>
                   </select>
                 </div>
 
                 <div>
-                  <Label htmlFor="edit-subcategory">Subcategoría</Label>
+                  <div className="flex items-center justify-between mb-1">
+                    <Label htmlFor="edit-subcategory">Subcategoría</Label>
+                    <button
+                      type="button"
+                      onClick={() => setIsManageSubcategoriesOpen(true)}
+                      className="text-xs text-white/70 hover:text-white flex items-center gap-1"
+                    >
+                      <Plus className="h-3 w-3" /> Gestionar
+                    </button>
+                  </div>
                   <select
                     id="edit-subcategory"
                     value={editingProduct?.subcategory || ''}
                     onChange={(e) => setEditingProduct({ ...editingProduct, subcategory: e.target.value })}
                     className="w-full bg-secondary border border-border rounded-md px-4 py-2 text-white"
                   >
-                    <option value="t-shirts">Camisetas</option>
-                    <option value="polos">Polos</option>
-                    <option value="gorras">Gorras</option>
-                    <option value="hoodies">Hoodies</option>
-                    <option value="joggers">Joggers</option>
+                    {availableSubcategories.map((s) => (
+                      <option key={s.value} value={s.value}>{s.label}</option>
+                    ))}
                   </select>
                 </div>
               </div>
@@ -1110,10 +1303,10 @@ export default function AdminInventory() {
                             className="w-4 h-4"
                           />
                           <div
-                            className="w-6 h-6 rounded border-2 border-white/20"
-                            style={{ backgroundColor: color.value }}
+                            className="w-6 h-6 rounded border-2 border-white/20 shrink-0"
+                            style={{ background: color.swatch }}
                           />
-                          <span className="text-sm text-white">{color.name}</span>
+                          <span className="text-sm text-white">{color.name} - {color.code}</span>
                         </label>
                       ))}
                     </div>
@@ -1132,8 +1325,8 @@ export default function AdminInventory() {
                           <div
                             key={index}
                             className="w-10 h-10 rounded border-2 border-white/30"
-                            style={{ backgroundColor: colorValue }}
-                            title={colorInfo?.name || colorValue}
+                            style={{ background: colorInfo?.swatch ?? colorValue }}
+                            title={colorInfo ? `${colorInfo.name} - ${colorInfo.code}` : colorValue}
                           />
                         );
                       })}
@@ -1141,6 +1334,13 @@ export default function AdminInventory() {
                   </div>
                 )}
               </div>
+
+              {renderSizesPicker(
+                Array.isArray(editingProduct?.sizes) ? editingProduct.sizes : [],
+                toggleEditSize,
+                isEditSizesDropdownOpen,
+                setIsEditSizesDropdownOpen,
+              )}
 
               <div>
                 <Label htmlFor="edit-image">URL de la Imagen</Label>
@@ -1397,6 +1597,74 @@ export default function AdminInventory() {
               >
                 Actualizar Producto
               </Button>
+            </div>
+          </DialogContent>
+        </Dialog>
+
+        {/* Manage Subcategories Dialog */}
+        <Dialog open={isManageSubcategoriesOpen} onOpenChange={setIsManageSubcategoriesOpen}>
+          <DialogContent className="bg-card border-border text-white max-w-md">
+            <DialogHeader>
+              <DialogTitle>Gestionar Subcategorías</DialogTitle>
+              <DialogDescription>
+                Agrega o elimina subcategorías personalizadas. Las predeterminadas no se pueden eliminar.
+              </DialogDescription>
+            </DialogHeader>
+
+            <div className="space-y-4 mt-2">
+              <div>
+                <Label htmlFor="new-subcategory" className="mb-1 block">Nueva subcategoría</Label>
+                <div className="flex gap-2">
+                  <Input
+                    id="new-subcategory"
+                    value={newSubcategoryLabel}
+                    onChange={(e) => setNewSubcategoryLabel(e.target.value)}
+                    onKeyDown={(e) => { if (e.key === 'Enter') handleAddCustomSubcategory(); }}
+                    placeholder="Ej: Shorts, Chaquetas, Conjuntos..."
+                    className="bg-secondary border-border text-white"
+                  />
+                  <Button
+                    type="button"
+                    onClick={handleAddCustomSubcategory}
+                    className="bg-white text-black hover:bg-gray-200"
+                  >
+                    <Plus className="h-4 w-4" />
+                  </Button>
+                </div>
+              </div>
+
+              <div>
+                <p className="text-xs uppercase tracking-wider text-muted-foreground mb-2">
+                  Catálogo actual ({availableSubcategories.length})
+                </p>
+                <div className="flex flex-wrap gap-2">
+                  {availableSubcategories.map((s) => {
+                    const isDefault = isDefaultSubcategory(s.value);
+                    return (
+                      <span
+                        key={s.value}
+                        className={`group flex items-center gap-2 rounded-md px-3 py-1.5 text-sm border ${
+                          isDefault ? 'bg-secondary border-border' : 'bg-white/10 border-white/30'
+                        }`}
+                      >
+                        {s.label}
+                        {isDefault ? (
+                          <span className="text-[10px] text-white/40 uppercase tracking-wider">default</span>
+                        ) : (
+                          <button
+                            type="button"
+                            onClick={() => handleDeleteCustomSubcategory(s.value)}
+                            className="text-red-400 hover:text-red-300"
+                            title="Eliminar"
+                          >
+                            <X className="h-3.5 w-3.5" />
+                          </button>
+                        )}
+                      </span>
+                    );
+                  })}
+                </div>
+              </div>
             </div>
           </DialogContent>
         </Dialog>
