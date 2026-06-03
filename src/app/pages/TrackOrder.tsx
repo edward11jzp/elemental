@@ -1,11 +1,12 @@
 import { useState, useEffect } from 'react';
 import { useSearchParams, Link } from 'react-router';
-import { useApp } from '../context';
 import { Button } from '../components/ui/button';
 import { Input } from '../components/ui/input';
 import { Label } from '../components/ui/label';
 import { Search, Package, CheckCircle2, XCircle, Clock, Loader2, Truck, Store } from 'lucide-react';
 import { findColor } from '../colors';
+import { getOrderById } from '../lib/orders';
+import type { Order } from '../types';
 
 const STATUS_META: Record<string, { label: string; color: string; icon: any; description: string }> = {
   pending:     { label: 'Pendiente',  color: 'text-yellow-300 border-yellow-400/40 bg-yellow-400/10', icon: Clock,        description: 'Tu pedido está esperando revisión de un administrador.' },
@@ -18,10 +19,32 @@ const STATUS_META: Record<string, { label: string; color: string; icon: any; des
 const STATUS_ORDER = ['pending', 'approved', 'in_progress', 'completed'] as const;
 
 export default function TrackOrder() {
-  const { orders } = useApp();
   const [searchParams, setSearchParams] = useSearchParams();
   const [input, setInput] = useState(searchParams.get('id') ?? '');
   const [submitted, setSubmitted] = useState<string | null>(searchParams.get('id'));
+  const [order, setOrder] = useState<Order | null>(null);
+  const [loading, setLoading] = useState(false);
+
+  // Normaliza para aceptar "order-123" o solo "123"
+  const normalize = (s: string) =>
+    s.trim().toLowerCase().replace(/\s+/g, '').replace(/^order-/, '');
+
+  // Fetch from Supabase whenever the tracking number changes
+  useEffect(() => {
+    if (!submitted) { setOrder(null); return; }
+    const trimmed = submitted.trim();
+    const normalized = normalize(trimmed);
+    setLoading(true);
+    Promise.all([
+      // Try the input as-is first
+      getOrderById(trimmed),
+      // Also try with "order-" prefix if user only typed digits
+      normalized && !trimmed.startsWith('order-') ? getOrderById(`order-${normalized}`) : Promise.resolve(null),
+    ])
+      .then(([a, b]) => setOrder(a ?? b))
+      .catch(() => setOrder(null))
+      .finally(() => setLoading(false));
+  }, [submitted]);
 
   // Re-sync when URL changes (e.g. direct link from confirmation page)
   useEffect(() => {
@@ -31,8 +54,6 @@ export default function TrackOrder() {
       setSubmitted(fromUrl);
     }
   }, [searchParams]);
-
-  const order = submitted ? orders.find((o) => o.id.toLowerCase() === submitted.trim().toLowerCase()) : null;
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -48,11 +69,11 @@ export default function TrackOrder() {
   const currentIdx = order ? STATUS_ORDER.indexOf(order.status as any) : -1;
 
   return (
-    <div className="bg-black min-h-screen py-16 px-4">
+    <div className="bg-black min-h-screen py-10 md:py-16 px-6 sm:px-4">
       <div className="max-w-3xl mx-auto">
-        <div className="text-center mb-10">
-          <h1 className="text-4xl font-bold mb-3">Revisa Tu Pedido</h1>
-          <p className="text-muted-foreground">
+        <div className="text-center mb-8 md:mb-10">
+          <h1 className="text-3xl sm:text-4xl font-bold mb-2 md:mb-3">Revisa Tu Pedido</h1>
+          <p className="text-sm md:text-base text-muted-foreground">
             Ingresa el número de pedido que recibiste para ver el estado.
           </p>
         </div>
@@ -64,7 +85,7 @@ export default function TrackOrder() {
               id="order-id"
               value={input}
               onChange={(e) => setInput(e.target.value)}
-              placeholder="order-1779059704447"
+              placeholder="1779059704447"
               className="bg-secondary border-border text-white font-mono text-base"
               autoComplete="off"
               autoCapitalize="off"
@@ -79,7 +100,14 @@ export default function TrackOrder() {
           </div>
         </form>
 
-        {submitted && !order && (
+        {submitted && loading && (
+          <div className="bg-card border border-border rounded-2xl p-8 text-center">
+            <Loader2 className="h-8 w-8 mx-auto text-white animate-spin mb-2" />
+            <p className="text-sm text-muted-foreground">Buscando tu pedido…</p>
+          </div>
+        )}
+
+        {submitted && !loading && !order && (
           <div className="bg-card border border-border rounded-2xl p-8 text-center">
             <Package className="h-12 w-12 mx-auto text-muted-foreground mb-3" />
             <h2 className="text-xl font-semibold mb-2">No encontramos ese pedido</h2>

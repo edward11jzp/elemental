@@ -153,4 +153,7 @@ export interface PaymentInfo {
 // Site Settings Types
 export interface SiteSettings {
   tagline: string; // Eslogan principal de la tienda
+  // Tasa de cambio: cuántos bolívares equivalen a 1 dólar.
+  // null/undefined o <= 0 → no se muestra conversión al cliente.
+  exchangeRate?: number | null;
 }

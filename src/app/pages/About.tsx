@@ -10,14 +10,14 @@ export default function About() {
         <div className="absolute top-1/2 left-1/2 w-80 h-80 bg-white rounded-full blur-3xl animate-pulse" style={{ animationDelay: '2.5s' }}></div>
       </div>
       
-      <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 relative z-10">
+      <div className="max-w-4xl mx-auto px-6 sm:px-6 lg:px-8 relative z-10">
         {/* Header */}
         <AnimatedSection animation="fade-in-up">
-          <div className="text-center mb-16">
-            <h1 className="text-5xl md:text-6xl mb-6 font-bold tracking-tight">
+          <div className="text-center mb-10 md:mb-16">
+            <h1 className="text-3xl sm:text-4xl md:text-6xl mb-4 md:mb-6 font-bold tracking-tight">
               Nuestra Historia
             </h1>
-            <div className="h-1 w-32 bg-gradient-to-r from-transparent via-white to-transparent mx-auto"></div>
+            <div className="h-1 w-24 md:w-32 bg-gradient-to-r from-transparent via-white to-transparent mx-auto"></div>
           </div>
         </AnimatedSection>
 
@@ -25,11 +25,11 @@ export default function About() {
         <div className="space-y-8">
           {/* First Paragraph */}
           <AnimatedSection animation="fade-in-up" delay={1}>
-            <div className="apple-card bg-gradient-to-br from-[#2A2A2A] to-[#1C1C1C] p-8 md:p-12 rounded-2xl border-2 border-white/10 hover:border-white/20 shadow-2xl hover:shadow-white/5 relative overflow-hidden group">
+            <div className="apple-card bg-gradient-to-br from-[#2A2A2A] to-[#1C1C1C] p-6 sm:p-8 md:p-12 rounded-2xl border-2 border-white/10 hover:border-white/20 shadow-2xl hover:shadow-white/5 relative overflow-hidden group">
               <div className="absolute inset-0 bg-gradient-to-br from-white/5 to-transparent opacity-0 group-hover:opacity-100 apple-transition"></div>
               <div className="relative z-10">
                 <div className="text-6xl text-white/20 mb-4">"</div>
-                <p className="text-lg md:text-xl text-white/90 leading-relaxed">
+                <p className="text-base md:text-xl text-white/90 leading-relaxed">
                   Nuestra historia nace de la pasión por ofrecer <span className="text-white font-semibold">calidad, compromiso y excelencia</span> en cada detalle. Con más de <span className="text-white font-semibold">10 años de experiencia</span> en la industria, hemos construido una reputación basada en la confianza de nuestros clientes y en la entrega constante de un servicio excepcional.
                 </p>
               </div>
@@ -38,7 +38,7 @@ export default function About() {
 
           {/* Second Paragraph with Icon */}
           <AnimatedSection animation="fade-in-up" delay={2}>
-            <div className="apple-card bg-gradient-to-br from-[#2A2A2A] to-[#1C1C1C] p-8 md:p-12 rounded-2xl border-2 border-white/10 hover:border-white/20 shadow-2xl hover:shadow-white/5 relative overflow-hidden group">
+            <div className="apple-card bg-gradient-to-br from-[#2A2A2A] to-[#1C1C1C] p-6 sm:p-8 md:p-12 rounded-2xl border-2 border-white/10 hover:border-white/20 shadow-2xl hover:shadow-white/5 relative overflow-hidden group">
               <div className="absolute inset-0 bg-gradient-to-br from-white/5 to-transparent opacity-0 group-hover:opacity-100 apple-transition"></div>
               <div className="relative z-10">
                 <div className="flex items-start gap-4 mb-4">
@@ -53,7 +53,7 @@ export default function About() {
                     Especialización y Dedicación
                   </h3>
                 </div>
-                <p className="text-lg md:text-xl text-white/90 leading-relaxed">
+                <p className="text-base md:text-xl text-white/90 leading-relaxed">
                   A lo largo de los años, nos hemos especializado en <span className="text-white font-semibold">bordados y estampados</span>, adaptándonos a las necesidades de cada proyecto y cuidando cada pieza como si fuera única. Nuestro equipo trabaja con <span className="text-white font-semibold">responsabilidad, dedicación y precisión</span>, asegurando resultados que no solo cumplen, sino que superan las expectativas.
                 </p>
               </div>
@@ -75,7 +75,7 @@ export default function About() {
                     Más que un Servicio
                   </h3>
                 </div>
-                <p className="text-lg md:text-xl text-black/80 leading-relaxed">
+                <p className="text-base md:text-xl text-black/80 leading-relaxed">
                   Más que un servicio, ofrecemos <span className="text-black font-semibold">soluciones personalizadas</span> que reflejan la identidad de cada cliente. Creemos que <span className="text-black font-semibold">cada diseño cuenta una historia</span>, y estamos aquí para ayudar a que la tuya se vea, se sienta y deje huella.
                 </p>
               </div>
@@ -86,15 +86,15 @@ export default function About() {
         {/* Stats Section */}
         <div className="mt-16 grid grid-cols-1 md:grid-cols-3 gap-6">
           <div className="text-center bg-gradient-to-br from-[#2A2A2A] to-[#1C1C1C] p-6 rounded-xl border border-white/10 hover:border-white/20 transition-all duration-300 hover:scale-105">
-            <div className="text-4xl font-bold text-white mb-2">10+</div>
+            <div className="text-3xl md:text-4xl font-bold text-white mb-2">10+</div>
             <div className="text-muted-foreground">Años de Experiencia</div>
           </div>
           <div className="text-center bg-gradient-to-br from-[#2A2A2A] to-[#1C1C1C] p-6 rounded-xl border border-white/10 hover:border-white/20 transition-all duration-300 hover:scale-105">
-            <div className="text-4xl font-bold text-white mb-2">100%</div>
+            <div className="text-3xl md:text-4xl font-bold text-white mb-2">100%</div>
             <div className="text-muted-foreground">Compromiso con Calidad</div>
           </div>
           <div className="text-center bg-gradient-to-br from-[#2A2A2A] to-[#1C1C1C] p-6 rounded-xl border border-white/10 hover:border-white/20 transition-all duration-300 hover:scale-105">
-            <div className="text-4xl font-bold text-white mb-2">∞</div>
+            <div className="text-3xl md:text-4xl font-bold text-white mb-2">∞</div>
             <div className="text-muted-foreground">Soluciones Personalizadas</div>
           </div>
         </div>

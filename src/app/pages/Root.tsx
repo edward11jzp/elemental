@@ -1,5 +1,6 @@
 import { Outlet } from 'react-router';
 import Navigation from '../components/Navigation';
+import MarqueeBanner from '../components/MarqueeBanner';
 import Footer from '../components/Footer';
 import ScrollToTop from '../components/ScrollToTop';
 import { ScrollProgress } from '../components/animations/ScrollProgress';
@@ -30,6 +31,7 @@ export default function Root() {
         {/* Content */}
         <div className="relative z-10">
           <Navigation />
+          <MarqueeBanner />
           <main>
             <Outlet />
           </main>

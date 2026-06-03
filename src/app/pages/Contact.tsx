@@ -16,15 +16,15 @@ export default function Contact() {
         <div className="absolute top-1/2 left-1/2 w-80 h-80 bg-green-500 rounded-full blur-3xl animate-pulse opacity-20" style={{ animationDelay: '2s' }}></div>
       </div>
       
-      <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 relative z-10">
+      <div className="max-w-4xl mx-auto px-6 sm:px-6 lg:px-8 relative z-10">
         {/* Header */}
         <AnimatedSection animation="fade-in-up">
-          <div className="text-center mb-16">
-            <h1 className="text-5xl md:text-6xl mb-6 font-bold tracking-tight">
+          <div className="text-center mb-10 md:mb-16">
+            <h1 className="text-3xl sm:text-4xl md:text-6xl mb-4 md:mb-6 font-bold tracking-tight">
               Contáctanos
             </h1>
-            <div className="h-1 w-32 bg-gradient-to-r from-transparent via-white to-transparent mx-auto mb-6"></div>
-            <p className="text-xl text-muted-foreground max-w-2xl mx-auto">
+            <div className="h-1 w-24 md:w-32 bg-gradient-to-r from-transparent via-white to-transparent mx-auto mb-4 md:mb-6"></div>
+            <p className="text-base md:text-xl text-muted-foreground max-w-2xl mx-auto">
               Estamos aquí para ayudarte. Ponte en contacto con nosotros a través de WhatsApp.
             </p>
           </div>
@@ -33,7 +33,7 @@ export default function Contact() {
         {/* Main Contact Card */}
         <AnimatedSection animation="fade-in-up" delay={1}>
           <div className="bg-gradient-to-br from-green-600 via-green-500 to-green-600 p-1 rounded-3xl mb-8 apple-card shadow-2xl shadow-green-500/20 hover:shadow-green-500/40">
-            <div className="bg-gradient-to-br from-[#2A2A2A] to-[#1C1C1C] p-8 md:p-12 rounded-3xl relative overflow-hidden group">
+            <div className="bg-gradient-to-br from-[#2A2A2A] to-[#1C1C1C] p-6 sm:p-8 md:p-12 rounded-3xl relative overflow-hidden group">
               <div className="absolute inset-0 bg-gradient-to-br from-green-500/10 to-transparent opacity-0 group-hover:opacity-100 apple-transition"></div>
               
               <div className="relative z-10">
@@ -45,7 +45,7 @@ export default function Contact() {
                 </div>
 
                 {/* Title */}
-                <h2 className="text-3xl md:text-4xl font-bold text-center mb-4 text-white">
+                <h2 className="text-2xl sm:text-3xl md:text-4xl font-bold text-center mb-4 text-white">
                   Escríbenos por WhatsApp
                 </h2>
 
@@ -54,7 +54,7 @@ export default function Contact() {
                   <Phone className="h-6 w-6 text-green-400" />
                   <a 
                     href={`tel:${displayNumber}`}
-                    className="text-3xl md:text-4xl font-bold text-white hover:text-green-400 transition-colors"
+                    className="text-xl sm:text-2xl md:text-4xl font-bold text-white hover:text-green-400 transition-colors break-all"
                   >
                     {displayNumber}
                   </a>

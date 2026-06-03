@@ -30,11 +30,17 @@ function figmaAssetResolver(): Plugin {
 }
 
 export default defineConfig({
+  root: path.resolve(__dirname, '.'),
   plugins: [
     figmaAssetResolver(),
     react(),
     tailwindcss(),
   ],
+  build: {
+    rollupOptions: {
+      input: path.resolve(__dirname, 'index.html'),
+    },
+  },
   resolve: {
     alias: {
       '@': path.resolve(__dirname, './src'),

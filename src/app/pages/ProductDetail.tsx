@@ -12,6 +12,7 @@ import { findColor, isLightSwatch } from '../colors';
 import { loadSizes, groupSizes, GROUP_LABELS, type SizeGroup } from '../sizes';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from '../components/ui/dialog';
 import { Ruler } from 'lucide-react';
+import { getSizeUpcharge } from '../lib/pricing';
 import backShirtImage from 'figma:asset/b830e653f860474b6908972729c57667f9dc6842.png';
 import womenBackShirtImage from '../../imports/image-1.png';
 import womenFrontShirtImage from '../../imports/Screenshot_2026-05-16_at_1.21.33_PM.png';
@@ -181,7 +182,7 @@ export default function ProductDetail() {
   const [selectedSize, setSelectedSize] = useState('');
   const [isSizeGuideOpen, setIsSizeGuideOpen] = useState(false);
   const [selectedColor, setSelectedColor] = useState('');
-  const [quantity, setQuantity] = useState(6);
+  const [quantity, setQuantity] = useState(1);
   const [isCustom, setIsCustom] = useState(false);
   const [logos, setLogos] = useState<string[]>([]);
   const [selectedLogoIndex, setSelectedLogoIndex] = useState<number>(0);
@@ -490,10 +491,13 @@ export default function ProductDetail() {
     let basePrice;
     const totalItemsInCart = cartItemCount + qty;
     if (totalItemsInCart >= 6) {
-      basePrice = 6.5; // 6+ total items = $6.5 per unit
+      basePrice = product.wholesalePrice ?? product.retailPrice;
     } else {
-      basePrice = 9; // Less than 6 total items = $9 per unit
+      basePrice = product.retailPrice;
     }
+
+    // Size upcharge (2XL/3XL/4XL) per unit
+    const sizeUpcharge = getSizeUpcharge(selectedSize);
 
     // Calculate total customization price from all logo instances
     if (isCustom && product.customPricing) {
@@ -504,10 +508,10 @@ export default function ProductDetail() {
         }
         return sum;
       }, 0);
-      return basePrice + totalCustomPrice;
+      return basePrice + sizeUpcharge + totalCustomPrice;
     }
 
-    return basePrice;
+    return basePrice + sizeUpcharge;
   };
 
   const currentPrice = calculatePrice(quantity);
@@ -555,7 +559,7 @@ export default function ProductDetail() {
               <p className="text-3xl mb-2">${currentPrice.toFixed(2)}</p>
               {quantity >= 6 && (
                 <p className="text-green-400 text-sm">
-                  ¡Precio al por mayor aplicado! $6.5 por artículo
+                  ¡Precio al por mayor aplicado! ${product.wholesalePrice?.toFixed(2) ?? product.retailPrice.toFixed(2)} por artículo
                 </p>
               )}
               {isCustom && product.customPricing && (() => {
@@ -778,7 +782,7 @@ export default function ProductDetail() {
                 </button>
               </div>
               <p className="text-sm text-muted-foreground mt-2">
-                Ordena 6+ artículos en total (todo el carrito) por solo $6.5 c/u
+                Ordena 6+ artículos en total (todo el carrito) por solo ${product.wholesalePrice?.toFixed(2) ?? product.retailPrice.toFixed(2)} c/u
               </p>
               {cartItemCount > 0 && (
                 <p className="text-sm text-white mt-1">

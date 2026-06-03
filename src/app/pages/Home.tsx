@@ -16,6 +16,7 @@ import hoodieImage from 'figma:asset/000b79075e554c3caa9cda5c12cfc602e256af3d.pn
 import menImage from 'figma:asset/d34a77067b13abc7af031b55d2f7ac2a556ba76a.png';
 import joggersImage from 'figma:asset/e6c2eb959acec89a78c0621a4c3d5c23a3f7fda7.png';
 import womenImage from 'figma:asset/9f8a99366f1dd435750f8f7443c9f181ed8cd617.png';
+import featuredBg from '../../assets/20230807_175751.jpg';
 
 const easeOut = [0.16, 1, 0.3, 1] as const;
 
@@ -71,13 +72,13 @@ export default function Home() {
 
         {/* Hero content with scroll fade */}
         <motion.div
-          className="relative text-center px-4 z-10"
+          className="relative text-center px-10 sm:px-8 md:px-4 z-10 max-w-[320px] sm:max-w-md md:max-w-3xl mx-auto"
           style={{ y: heroContentY, opacity: heroContentOpacity }}
         >
           <motion.img
             src={logo}
             alt="ELEMENTAL"
-            className="w-auto h-24 md:h-32 mx-auto mb-6"
+            className="w-auto h-16 sm:h-20 md:h-32 mx-auto mb-4 md:mb-6"
             initial={{ opacity: 0, scale: 1.5, filter: 'blur(30px)' }}
             animate={{ opacity: 1, scale: 1, filter: 'blur(0px)' }}
             transition={{ duration: 2.2, ease: easeOut }}
@@ -85,7 +86,7 @@ export default function Home() {
           <TextReveal
             as="p"
             text={siteSettings.tagline}
-            className="text-2xl text-muted-foreground mb-8 max-w-3xl mx-auto tracking-wide"
+            className="text-sm sm:text-base md:text-2xl text-muted-foreground mb-6 md:mb-8 max-w-3xl mx-auto tracking-wide leading-snug"
             delay={1.2}
             staggerChildren={0.14}
           />
@@ -96,9 +97,9 @@ export default function Home() {
           >
             <MagneticButton>
               <Link to="/men/t-shirts">
-                <Button className="group bg-white text-black hover:bg-gray-200 px-8 md:px-10 py-6 md:py-7 text-base md:text-lg shadow-lg hover:shadow-2xl active:scale-95 transition-transform">
+                <Button className="group bg-white text-black hover:bg-gray-200 px-5 sm:px-7 md:px-10 py-4 sm:py-5 md:py-7 text-sm sm:text-base md:text-lg shadow-lg hover:shadow-2xl active:scale-95 transition-transform">
                   Explorar Colección
-                  <ArrowRight className="ml-2 h-5 w-5 transition-transform duration-300 group-hover:translate-x-1" />
+                  <ArrowRight className="ml-2 h-4 w-4 md:h-5 md:w-5 transition-transform duration-300 group-hover:translate-x-1" />
                 </Button>
               </Link>
             </MagneticButton>
@@ -280,10 +281,10 @@ export default function Home() {
             />
           </div>
 
-          <div className="absolute inset-0 opacity-10">
+          <div className="absolute inset-0 opacity-25">
             <ParallaxImage
-              src="https://images.unsplash.com/photo-1691995016747-d367c51c7d65?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&ixid=M3w3Nzg4Nzd8MHwxfHNlYXJjaHwxfHx1cmJhbiUyMHN0cmVldCUyMGdyYWZmaXRpJTIwd2FsbHxlbnwxfHx8fDE3NzI2NjE3NDd8MA&ixlib=rb-4.1.0&q=80&w=1080"
-              alt="Fondo"
+              src={featuredBg}
+              alt="Fondo - franelas Elemental"
               className="w-full h-full"
               speed={0.3}
             />

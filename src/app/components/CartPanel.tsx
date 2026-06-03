@@ -1,20 +1,26 @@
 import { Link } from 'react-router';
 import { useApp } from '../context';
 import { Button } from './ui/button';
+import { SheetClose } from './ui/sheet';
 import { Trash2 } from 'lucide-react';
+import {
+  getUnitPrice,
+  getRetailUnitPrice,
+  getSizeUpcharge,
+  WHOLESALE_THRESHOLD,
+} from '../lib/pricing';
 
 export default function CartPanel() {
   const { cart, removeFromCart, updateCartItemQuantity, cartTotal, cartItemCount } = useApp();
 
-  const calculateItemPrice = (totalCartQuantity: number): number => {
-    if (totalCartQuantity >= 6) return 6.5;
-    return 9; // Base price
-  };
-
-  // Calculate savings
-  const regularPrice = cartItemCount * 9; // Regular price for all items
-  const currentPrice = cartTotal; // Current price with wholesale discount
-  const savings = cartItemCount >= 6 ? regularPrice - currentPrice : 0;
+  // Subtotal "equivalente a retail": lo que costaría si TODO se cobrara al precio
+  // por detal del propio producto (incluyendo el recargo de talla). Sirve como
+  // referencia para mostrar el ahorro cuando el carrito está en wholesale.
+  const regularPrice = cart.reduce((sum, item) => {
+    const retailUnit = getRetailUnitPrice(item.product) + getSizeUpcharge(item.size);
+    return sum + retailUnit * item.quantity;
+  }, 0);
+  const savings = cartItemCount >= WHOLESALE_THRESHOLD ? Math.max(0, regularPrice - cartTotal) : 0;
 
   if (cart.length === 0) {
     return (
@@ -37,7 +43,7 @@ export default function CartPanel() {
         {/* Lista de productos */}
         <div>
           {cart.map((item, index) => {
-            const itemPrice = calculateItemPrice(cartItemCount);
+            const itemPrice = getUnitPrice(item.product, item.size, cartItemCount);
             const itemTotal = itemPrice * item.quantity;
 
             return (
@@ -82,7 +88,7 @@ export default function CartPanel() {
                     <div className="text-right">
                       <p className="text-white">${itemTotal.toFixed(2)}</p>
                       <p className="text-xs text-muted-foreground">
-                        ${itemPrice} c/u
+                        ${itemPrice.toFixed(2)} c/u
                       </p>
                     </div>
                   </div>
@@ -100,11 +106,10 @@ export default function CartPanel() {
               <span className="text-white">${cartTotal.toFixed(2)}</span>
             </div>
 
-            {savings > 0 && (
+            {cartItemCount >= WHOLESALE_THRESHOLD && savings > 0 && (
               <div className="bg-green-900/20 border border-green-500/30 rounded-lg p-3 space-y-1">
                 <div className="flex justify-between items-center">
-                  <span className="text-green-400 font-medium">¡Precio al por mayor!</span>
-                  <span className="text-green-400 font-medium">${calculateItemPrice(cartItemCount)} c/u</span>
+                  <span className="text-green-400 font-medium">¡Precio al por mayor aplicado!</span>
                 </div>
                 <div className="flex justify-between items-center text-sm">
                   <span className="text-green-300/80">Precio regular sería:</span>
@@ -117,17 +122,19 @@ export default function CartPanel() {
               </div>
             )}
 
-            {cartItemCount < 6 && (
+            {cartItemCount < WHOLESALE_THRESHOLD && (
               <p className="text-xs text-yellow-400 bg-yellow-900/20 border border-yellow-500/30 rounded p-2">
-                Agrega {6 - cartItemCount} artículo{(6 - cartItemCount) !== 1 ? 's' : ''} más para obtener precio al por mayor ($6.5 c/u) y ahorrar ${((6 * 9) - (6 * 6.5)).toFixed(2)}
+                Agrega {WHOLESALE_THRESHOLD - cartItemCount} artículo{(WHOLESALE_THRESHOLD - cartItemCount) !== 1 ? 's' : ''} más para obtener precio al por mayor.
               </p>
             )}
           </div>
-          <Link to="/checkout" className="block">
-            <Button className="w-full bg-white text-black hover:bg-gray-200">
-              Proceder al Pago
-            </Button>
-          </Link>
+          <SheetClose asChild>
+            <Link to="/checkout" className="block">
+              <Button className="w-full bg-white text-black hover:bg-gray-200">
+                Proceder al Pago
+              </Button>
+            </Link>
+          </SheetClose>
         </div>
       </div>
     </div>

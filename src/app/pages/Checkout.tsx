@@ -9,14 +9,31 @@ import { Upload, DollarSign, CheckCircle2, Mail, Truck, Store, MapPin, Sparkles,
 import { PaymentMethod, FulfillmentType } from '../types';
 import { VENEZUELA_STATES } from '../venezuela';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from '../components/ui/dialog';
+import {
+  getUnitPrice,
+  getRetailUnitPrice,
+  getSizeUpcharge,
+  WHOLESALE_THRESHOLD,
+} from '../lib/pricing';
 
 export default function Checkout() {
-  const { cart, cartTotal, addOrder, clearCart, currentUser, cartItemCount, updateUser, paymentInfo, locations } = useApp();
+  const { cart, cartTotal, addOrder, clearCart, cartItemCount, paymentInfo, locations, siteSettings } = useApp();
+
+  // Conversión a bolívares. Si la tasa no está configurada o es inválida → ocultamos la línea.
+  const exchangeRate = siteSettings.exchangeRate;
+  const showBolivares = typeof exchangeRate === 'number' && exchangeRate > 0;
+  const totalBolivares = showBolivares ? cartTotal * exchangeRate : 0;
+  const formatBs = (n: number) =>
+    new Intl.NumberFormat('es-VE', {
+      minimumFractionDigits: 2,
+      maximumFractionDigits: 2,
+    }).format(n);
   const navigate = useNavigate();
+  // Guest checkout: never pre-fill from any logged-in admin/employee session.
   const [formData, setFormData] = useState({
-    name: currentUser?.name || '',
-    email: currentUser?.email || '',
-    phone: currentUser?.phone || '',
+    name: '',
+    email: '',
+    phone: '',
     address: '',
     city: '',
     state: '',
@@ -38,18 +55,6 @@ export default function Checkout() {
     customerPhone: string;
   } | null>(null);
   const [customNoticeOpen, setCustomNoticeOpen] = useState(false);
-
-  // Update form when user logs in
-  useEffect(() => {
-    if (currentUser) {
-      setFormData(prev => ({
-        ...prev,
-        name: currentUser.name || prev.name,
-        email: currentUser.email || prev.email,
-        phone: currentUser.phone || prev.phone,
-      }));
-    }
-  }, [currentUser]);
 
   const processFile = (file: File) => {
     if (!file.type.startsWith('image/')) {
@@ -118,15 +123,10 @@ export default function Checkout() {
       return;
     }
 
-    // Update user's phone number if logged in and is a customer
-    if (currentUser && currentUser.role === 'customer' && formData.phone) {
-      updateUser(currentUser.id, { phone: formData.phone });
-    }
-
     const pickupLoc = locations.find((l) => l.id === pickupLocationId);
     const order = {
       id: `order-${Date.now()}`,
-      customerId: currentUser?.id || 'guest',
+      customerId: 'guest',
       customerName: formData.name,
       customerEmail: formData.email,
       customerPhone: formData.phone,
@@ -163,15 +163,13 @@ export default function Checkout() {
     window.scrollTo({ top: 0, behavior: 'smooth' });
   };
 
-  const calculateItemPrice = (totalCartQuantity: number): number => {
-    if (totalCartQuantity >= 6) return 6.5;
-    return 9;
-  };
-
-  // Calculate savings
-  const regularPrice = cartItemCount * 9; // Regular price for all items
-  const currentPrice = cartTotal; // Current price with wholesale discount
-  const savings = cartItemCount >= 6 ? regularPrice - currentPrice : 0;
+  // Subtotal "equivalente a retail": referencia para mostrar el ahorro
+  // cuando el carrito califica para precio al por mayor.
+  const regularPrice = cart.reduce((sum, item) => {
+    const retailUnit = getRetailUnitPrice(item.product) + getSizeUpcharge(item.size);
+    return sum + retailUnit * item.quantity;
+  }, 0);
+  const savings = cartItemCount >= WHOLESALE_THRESHOLD ? Math.max(0, regularPrice - cartTotal) : 0;
 
   // Post-checkout confirmation screen (guest-friendly: no account needed)
   if (confirmation) {
@@ -196,11 +194,16 @@ export default function Checkout() {
               <span>${confirmation.total.toFixed(2)}</span>
             </div>
             {confirmation.email && (
-              <div className="flex items-center gap-2 pt-2 border-t border-border/60 text-white/80">
-                <Mail className="h-4 w-4" />
-                <span>
-                  Te enviaremos confirmación a <strong>{confirmation.email}</strong>
-                </span>
+              <div className="pt-2 border-t border-border/60 text-white/80 space-y-2">
+                <div className="flex items-center gap-2">
+                  <Mail className="h-4 w-4" />
+                  <span>
+                    Te enviaremos confirmación a <strong>{confirmation.email}</strong>
+                  </span>
+                </div>
+                <p className="text-xs text-yellow-300/90 bg-yellow-500/10 border border-yellow-500/30 rounded px-3 py-2">
+                  Si no recibes el correo en los próximos 5 minutos, revisa tu carpeta de <strong>spam</strong> o correo no deseado.
+                </p>
               </div>
             )}
           </div>
@@ -262,6 +265,28 @@ export default function Checkout() {
             </DialogHeader>
 
             <div className="space-y-4 mt-2">
+              {/* Highlighted Order Number */}
+              <div className="bg-gradient-to-br from-fuchsia-500/20 to-purple-600/20 border-2 border-fuchsia-400/40 rounded-xl p-4 text-center">
+                <p className="text-[10px] uppercase tracking-[0.25em] text-fuchsia-200/70 mb-1">N° de Pedido</p>
+                <div className="flex items-center justify-center gap-2">
+                  <p className="text-white font-mono text-lg md:text-xl font-bold break-all">
+                    {confirmation.orderId}
+                  </p>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      navigator.clipboard?.writeText(confirmation.orderId);
+                      toast.success('N° de pedido copiado');
+                    }}
+                    className="shrink-0 p-1.5 rounded hover:bg-white/10 text-white/70 hover:text-white"
+                    title="Copiar"
+                  >
+                    <Copy className="h-4 w-4" />
+                  </button>
+                </div>
+              </div>
+
+              {/* Email destination */}
               <div className="bg-secondary/50 border border-border rounded-lg p-4">
                 <p className="text-xs text-muted-foreground mb-1">Enviar a:</p>
                 <div className="flex items-center justify-between gap-2">
@@ -280,25 +305,25 @@ export default function Checkout() {
                 </div>
               </div>
 
-              <div className="bg-secondary/50 border border-border rounded-lg p-4">
-                <p className="text-xs text-muted-foreground mb-2">Asunto del correo:</p>
-                <p className="text-white text-sm font-mono break-all">
-                  {[confirmation.customerName, confirmation.customerPhone].filter(Boolean).join(' - ') || 'Tu nombre - Tu teléfono'}
-                </p>
-              </div>
-
               <ul className="text-sm text-white/70 space-y-1.5 list-disc pl-5">
-                <li>Adjunta el logo en alta resolución (PNG, JPG o SVG).</li>
-                <li>Incluye tu nombre y número de teléfono en el asunto.</li>
-                <li>Menciona también tu N° de pedido: <span className="font-mono text-white">{confirmation.orderId}</span></li>
+                <li>Adjunta tu logo o diseño en alta resolución (PNG, JPG o SVG).</li>
+                <li>Confirma tu nombre y teléfono en el cuerpo del mensaje.</li>
+                <li>Asegúrate de incluir tu <span className="text-fuchsia-200 font-semibold">N° de Pedido</span> arriba.</li>
               </ul>
 
               {(() => {
+                const customerName = confirmation.customerName || 'Cliente';
+                const customerPhone = confirmation.customerPhone || '';
                 const subject = encodeURIComponent(
-                  `${confirmation.customerName} - ${confirmation.customerPhone} - Pedido ${confirmation.orderId}`,
+                  `Diseño para pedido ${confirmation.orderId} - ${customerName}`,
                 );
                 const body = encodeURIComponent(
-                  `Hola, adjunto el diseño para mi pedido ${confirmation.orderId}.\n\nNombre: ${confirmation.customerName}\nTeléfono: ${confirmation.customerPhone}`,
+                  `Hola equipo ELEMENTAL,\n\n` +
+                  `Adjunto el diseño/logo para mi pedido personalizado.\n\n` +
+                  `N° de Pedido: ${confirmation.orderId}\n` +
+                  `Nombre: ${customerName}\n` +
+                  (customerPhone ? `Teléfono: ${customerPhone}\n` : '') +
+                  `\n¡Gracias!`
                 );
                 return (
                   <a href={`mailto:elementalpedido@gmail.com?subject=${subject}&body=${body}`}>
@@ -330,19 +355,6 @@ export default function Checkout() {
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
           {/* Order Form */}
           <div className="lg:col-span-2">
-
-            {currentUser && (
-              <div className="bg-gradient-to-br from-green-900/20 to-green-800/10 border border-green-500/30 rounded-lg p-4 mb-6">
-                <div className="flex items-center gap-2">
-                  <svg className="w-5 h-5 text-green-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
-                  </svg>
-                  <p className="text-green-400 font-medium">
-                    Sesión iniciada como {currentUser.name}
-                  </p>
-                </div>
-              </div>
-            )}
 
             <form onSubmit={handleSubmit} className="bg-card p-6 rounded-lg">
               <h2 className="text-2xl mb-6">Información de Contacto</h2>
@@ -458,16 +470,23 @@ export default function Checkout() {
                   </>
                 )}
 
-                {fulfillmentType === 'pickup' && (
+                {fulfillmentType === 'pickup' && (() => {
+                  // Exclude shipping-only entries (e.g. "Envíos Nacionales") from pickup list
+                  const isShippingOnly = (l: typeof locations[0]) =>
+                    /env[ií]os?\s*nacionales?|env[ií]os?$|pedidos\s+y\s+env[ií]os/i.test(
+                      `${l.name} ${l.shoppingCenter}`,
+                    );
+                  const pickupLocations = locations.filter((l) => !isShippingOnly(l));
+                  return (
                   <div>
                     <Label className="mb-2 block">Tienda para Retiro *</Label>
-                    {locations.length === 0 ? (
+                    {pickupLocations.length === 0 ? (
                       <p className="text-sm text-muted-foreground p-4 bg-secondary rounded-md">
                         No hay tiendas configuradas en este momento.
                       </p>
                     ) : (
                       <div className="space-y-2">
-                        {locations.map((loc) => {
+                        {pickupLocations.map((loc) => {
                           const selected = pickupLocationId === loc.id;
                           return (
                             <button
@@ -494,7 +513,8 @@ export default function Checkout() {
                       </div>
                     )}
                   </div>
-                )}
+                  );
+                })()}
 
                 <div>
                   <Label htmlFor="notes">Notas del Pedido</Label>
@@ -784,7 +804,7 @@ export default function Checkout() {
               
               <div className="space-y-4 mb-6">
                 {cart.map((item, index) => {
-                  const itemPrice = calculateItemPrice(cartItemCount);
+                  const itemPrice = getUnitPrice(item.product, item.size, cartItemCount);
                   return (
                     <div key={`${item.product.id}-${index}`} className="flex gap-4">
                       <img
@@ -803,7 +823,7 @@ export default function Checkout() {
                       </div>
                       <div className="text-right">
                         <p className="text-sm">${(itemPrice * item.quantity).toFixed(2)}</p>
-                        <p className="text-xs text-muted-foreground">${itemPrice} c/u</p>
+                        <p className="text-xs text-muted-foreground">${itemPrice.toFixed(2)} c/u</p>
                       </div>
                     </div>
                   );
@@ -816,11 +836,10 @@ export default function Checkout() {
                   <span>${cartTotal.toFixed(2)}</span>
                 </div>
 
-                {savings > 0 && (
+                {cartItemCount >= WHOLESALE_THRESHOLD && savings > 0 && (
                   <div className="bg-green-900/20 border border-green-500/30 rounded-lg p-3 space-y-1">
                     <div className="flex justify-between items-center">
-                      <span className="text-green-400 font-medium">¡Precio al por mayor!</span>
-                      <span className="text-green-400 font-medium">${calculateItemPrice(cartItemCount)} c/u</span>
+                      <span className="text-green-400 font-medium">¡Precio al por mayor aplicado!</span>
                     </div>
                     <div className="flex justify-between items-center text-sm">
                       <span className="text-green-300/80">Precio regular sería:</span>
@@ -837,6 +856,13 @@ export default function Checkout() {
                   <span>Total</span>
                   <span>${cartTotal.toFixed(2)}</span>
                 </div>
+
+                {showBolivares && (
+                  <div className="flex justify-between text-sm text-muted-foreground">
+                    <span>Total en bolívares</span>
+                    <span>Bs. {formatBs(totalBolivares)}</span>
+                  </div>
+                )}
               </div>
 
               <div className="mt-6 p-4 bg-secondary rounded text-sm">

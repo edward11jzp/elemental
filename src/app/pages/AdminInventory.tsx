@@ -18,17 +18,16 @@ import { Textarea } from '../components/ui/textarea';
 import { toast } from 'sonner';
 import { PALETTE as AVAILABLE_COLORS } from '../colors';
 import { loadSizes, saveCustomSize, deleteCustomSize, groupSizes, GROUP_LABELS, type Size, type SizeGroup } from '../sizes';
-import { loadSubcategories, saveCustomSubcategory, deleteCustomSubcategory, isDefaultSubcategory, type Subcategory } from '../subcategories';
 
 export default function AdminInventory() {
-  const { currentUser, products, addProduct, updateProduct, deleteProduct } = useApp();
+  const { currentUser, products, addProduct, updateProduct, deleteProduct, subcategories: availableSubcategories, addSubcategory, deleteSubcategory: removeSubcategory } = useApp();
   const navigate = useNavigate();
   const [searchTerm, setSearchTerm] = useState('');
   const [categoryFilter, setCategoryFilter] = useState<string>('all');
   const [isAddModalOpen, setIsAddModalOpen] = useState(false);
   const [isEditModalOpen, setIsEditModalOpen] = useState(false);
   const [editingProduct, setEditingProduct] = useState<any>(null);
-  const [imagePreview, setImagePreview] = useState<string>('');
+  const [imagePreviews, setImagePreviews] = useState<string[]>(['', '', '', '']);
   const [newProduct, setNewProduct] = useState({
     name: '',
     category: 'men',
@@ -55,7 +54,6 @@ export default function AdminInventory() {
   const [availableSizes, setAvailableSizes] = useState<Size[]>(() => loadSizes());
   const [newSizeLabel, setNewSizeLabel] = useState('');
   const [newSizeGroup, setNewSizeGroup] = useState<SizeGroup>('otras');
-  const [availableSubcategories, setAvailableSubcategories] = useState<Subcategory[]>(() => loadSubcategories());
   const [isManageSubcategoriesOpen, setIsManageSubcategoriesOpen] = useState(false);
   const [newSubcategoryLabel, setNewSubcategoryLabel] = useState('');
   const [customImagePreviews, setCustomImagePreviews] = useState({
@@ -80,7 +78,7 @@ export default function AdminInventory() {
     return matchesSearch && matchesCategory;
   });
 
-  const handleAddProduct = () => {
+  const handleAddProduct = async () => {
     // Validation
     if (!newProduct.name.trim()) {
       toast.error('Por favor ingresa un nombre de producto');
@@ -98,39 +96,47 @@ export default function AdminInventory() {
       toast.error('Por favor ingresa una cantidad de stock válida');
       return;
     }
-    if (!newProduct.image.trim()) {
-      toast.error('Por favor proporciona una URL de imagen o sube una imagen');
+    const validImages = imagePreviews.filter(img => img.trim() !== '');
+    if (validImages.length === 0 && !newProduct.image.trim()) {
+      toast.error('Por favor sube al menos una imagen');
       return;
     }
 
-    // Create product object
     const productToAdd = {
-      id: `product-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
       name: newProduct.name,
-      category: newProduct.category as 'men' | 'women' | 'hats' | 'hoodies' | 'joggers',
+      category: newProduct.category as 'men' | 'women' | 'kids',
       subcategory: newProduct.subcategory,
-      price: parseFloat(newProduct.retailPrice), // Keep for backwards compatibility
+      price: parseFloat(newProduct.retailPrice),
       retailPrice: parseFloat(newProduct.retailPrice),
       wholesalePrice: parseFloat(newProduct.wholesalePrice),
-      image: newProduct.image,
-      images: [newProduct.image],
+      image: validImages[0] || newProduct.image,
+      images: validImages.length > 0 ? validImages : [newProduct.image],
       description: newProduct.description,
       sizes: newProduct.sizes.length > 0 ? newProduct.sizes : ['S', 'M', 'L', 'XL', '2XL'],
-      colors: ['Black', 'White', 'Grey'],
+      colors: [],
       colorPalette: newProduct.colorPalette,
       stock: parseInt(newProduct.stock),
       allowCustom: newProduct.allowCustom,
+      // Si el producto permite personalización, persistimos los precios por
+      // tamaño (Pequeño/Mediano/Grande). Sin estos valores el selector de
+      // tamaño no aparece al cliente en la página del producto.
+      customPricing: newProduct.allowCustom
+        ? ((newProduct as any).customPricing ?? { small: 0, medium: 0, large: 0 })
+        : undefined,
       featured: false,
       trending: false,
       customizationImages: newProduct.customizationImages,
     };
 
-    // Add product to context
-    addProduct(productToAdd);
-
-    toast.success('¡Producto agregado exitosamente!');
+    try {
+      await addProduct(productToAdd);
+      toast.success('¡Producto agregado exitosamente!');
+    } catch (err: any) {
+      toast.error(err?.message ?? 'No se pudo guardar el producto');
+      return;
+    }
     setIsAddModalOpen(false);
-    setImagePreview('');
+    setImagePreviews(['', '', '', '']);
     setCustomImagePreviews({ front: '', back: '', sleeves: '' });
     setNewProduct({
       name: '',
@@ -193,25 +199,34 @@ export default function AdminInventory() {
     toast.success('Talla eliminada del catálogo');
   };
 
-  const handleAddCustomSubcategory = () => {
-    const created = saveCustomSubcategory(newSubcategoryLabel);
-    if (!created) {
-      toast.error('Nombre inválido o subcategoría ya existe');
+  const handleAddCustomSubcategory = async () => {
+    const label = newSubcategoryLabel.trim();
+    if (!label) { toast.error('Nombre inválido'); return; }
+    const value = label.toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '').trim().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '');
+    if (availableSubcategories.some(s => s.value === value)) {
+      toast.error('Subcategoría ya existe');
       return;
     }
-    setAvailableSubcategories(loadSubcategories());
-    setNewSubcategoryLabel('');
-    toast.success(`Subcategoría "${created.label}" agregada`);
+    try {
+      await addSubcategory(value, label);
+      setNewSubcategoryLabel('');
+      toast.success(`Subcategoría "${label}" agregada`);
+    } catch {
+      toast.error('No se pudo agregar la subcategoría');
+    }
   };
 
-  const handleDeleteCustomSubcategory = (value: string) => {
-    if (isDefaultSubcategory(value)) {
+  const handleDeleteCustomSubcategory = async (value: string) => {
+    if (availableSubcategories.find(s => s.value === value)?.is_default) {
       toast.error('No se puede eliminar una subcategoría por defecto');
       return;
     }
-    deleteCustomSubcategory(value);
-    setAvailableSubcategories(loadSubcategories());
-    toast.success('Subcategoría eliminada');
+    try {
+      await removeSubcategory(value);
+      toast.success('Subcategoría eliminada');
+    } catch {
+      toast.error('No se pudo eliminar la subcategoría');
+    }
   };
 
   // Custom-size identifier: anything not in the default master list
@@ -346,7 +361,7 @@ export default function AdminInventory() {
     );
   };
 
-  const handleEditProduct = () => {
+  const handleEditProduct = async () => {
     // Validation
     if (!editingProduct.name.trim()) {
       toast.error('Por favor ingresa un nombre de producto');
@@ -367,73 +382,82 @@ export default function AdminInventory() {
       toast.error('Por favor ingresa una cantidad de stock válida');
       return;
     }
-    if (!editingProduct.image.trim()) {
-      toast.error('Por favor proporciona una URL de imagen o sube una imagen');
+    const validImages = imagePreviews.filter(img => img.trim() !== '');
+    if (validImages.length === 0 && !editingProduct.image.trim()) {
+      toast.error('Por favor sube al menos una imagen');
       return;
     }
 
-    // Update product in context
-    updateProduct(editingProduct.id, {
-      name: editingProduct.name,
-      category: editingProduct.category,
-      subcategory: editingProduct.subcategory,
-      price: typeof retailPrice === 'string' ? parseFloat(retailPrice) : retailPrice,
-      retailPrice: typeof retailPrice === 'string' ? parseFloat(retailPrice) : retailPrice,
-      wholesalePrice: typeof wholesalePrice === 'string' ? parseFloat(wholesalePrice) : wholesalePrice,
-      image: editingProduct.image,
-      images: [editingProduct.image],
-      description: editingProduct.description,
-      stock: typeof editingProduct.stock === 'string' ? parseInt(editingProduct.stock) : editingProduct.stock,
-      allowCustom: editingProduct.allowCustom,
-      colorPalette: Array.isArray(editingProduct.colorPalette) ? editingProduct.colorPalette : [],
-      sizes: Array.isArray(editingProduct.sizes) && editingProduct.sizes.length > 0
-        ? editingProduct.sizes
-        : ['S', 'M', 'L', 'XL', '2XL'],
-      customizationImages: editingProduct.customizationImages,
-    });
-
-    toast.success('¡Producto actualizado exitosamente!');
+    try {
+      await updateProduct(editingProduct.id, {
+        name: editingProduct.name,
+        category: editingProduct.category,
+        subcategory: editingProduct.subcategory,
+        price: typeof retailPrice === 'string' ? parseFloat(retailPrice) : retailPrice,
+        retailPrice: typeof retailPrice === 'string' ? parseFloat(retailPrice) : retailPrice,
+        wholesalePrice: typeof wholesalePrice === 'string' ? parseFloat(wholesalePrice) : wholesalePrice,
+        image: validImages[0] || editingProduct.image,
+        images: validImages.length > 0 ? validImages : [editingProduct.image],
+        description: editingProduct.description,
+        stock: typeof editingProduct.stock === 'string' ? parseInt(editingProduct.stock) : editingProduct.stock,
+        allowCustom: editingProduct.allowCustom,
+        // Precios por tamaño de estampado (Pequeño/Mediano/Grande).
+        // Solo se persisten si la personalización está activa; en caso
+        // contrario, se limpian (null) para no dejar valores fantasma.
+        customPricing: editingProduct.allowCustom
+          ? (editingProduct.customPricing ?? { small: 0, medium: 0, large: 0 })
+          : undefined,
+        colorPalette: Array.isArray(editingProduct.colorPalette) ? editingProduct.colorPalette : [],
+        sizes: Array.isArray(editingProduct.sizes) && editingProduct.sizes.length > 0
+          ? editingProduct.sizes
+          : ['S', 'M', 'L', 'XL', '2XL'],
+        customizationImages: editingProduct.customizationImages,
+      });
+      toast.success('¡Producto actualizado exitosamente!');
+    } catch (err: any) {
+      toast.error(err?.message ?? 'No se pudo actualizar el producto');
+      return;
+    }
     setIsEditModalOpen(false);
-    setImagePreview('');
+    setImagePreviews(['', '', '', '']);
     setCustomImagePreviews({ front: '', back: '', sleeves: '' });
     setEditingProduct(null);
   };
 
-  const handleImageUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleProductImageUpload = async (slotIndex: number, e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
-    if (file) {
-      // Check file size (max 5MB)
-      if (file.size > 5 * 1024 * 1024) {
-        toast.error('El tamaño de la imagen debe ser menor a 5MB');
-        return;
-      }
-
-      // Check file type
-      if (!file.type.startsWith('image/')) {
-        toast.error('Por favor sube un archivo de imagen');
-        return;
-      }
-
-      // Create preview
-      const reader = new FileReader();
-      reader.onloadend = () => {
-        const result = reader.result as string;
-        setImagePreview(result);
-        if (isEditModalOpen && editingProduct) {
-          setEditingProduct({ ...editingProduct, image: result });
-        } else {
-          setNewProduct({ ...newProduct, image: result });
-        }
-      };
-      reader.readAsDataURL(file);
+    if (!file) return;
+    if (file.size > 20 * 1024 * 1024) {
+      toast.error('El tamaño de la imagen debe ser menor a 20MB');
+      return;
+    }
+    if (!file.type.startsWith('image/')) {
+      toast.error('Por favor sube un archivo de imagen');
+      return;
+    }
+    const toastId = toast.loading('Comprimiendo y subiendo imagen...');
+    try {
+      const { uploadProductImage } = await import('../lib/storage');
+      const url = await uploadProductImage(file);
+      setImagePreviews(prev => {
+        const updated = [...prev];
+        updated[slotIndex] = url;
+        return updated;
+      });
+      toast.success('Imagen subida', { id: toastId });
+    } catch (err: any) {
+      toast.error(err?.message ?? 'No se pudo subir la imagen', { id: toastId });
+    } finally {
+      // Reset the file input so the same file can be re-selected if needed
+      e.target.value = '';
     }
   };
 
   const handleCustomizationImageUpload = (view: 'front' | 'back' | 'sleeves', e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (file) {
-      if (file.size > 5 * 1024 * 1024) {
-        toast.error('El tamaño de la imagen debe ser menor a 5MB');
+      if (file.size > 20 * 1024 * 1024) {
+        toast.error('El tamaño de la imagen debe ser menor a 20MB');
         return;
       }
 
@@ -468,19 +492,21 @@ export default function AdminInventory() {
     }
   };
 
-  const clearImagePreview = () => {
-    setImagePreview('');
-    if (isEditModalOpen && editingProduct) {
-      setEditingProduct({ ...editingProduct, image: '' });
-    } else {
-      setNewProduct({ ...newProduct, image: '' });
-    }
+  const clearProductImage = (slotIndex: number) => {
+    setImagePreviews(prev => {
+      const updated = [...prev];
+      updated[slotIndex] = '';
+      return updated;
+    });
   };
 
   const handleDeleteProduct = (productId: string) => {
     if (confirm('¿Estás seguro de que deseas eliminar este producto?')) {
-      deleteProduct(productId);
-      toast.success('Producto eliminado exitosamente');
+      deleteProduct(productId).then(() => {
+        toast.success('Producto eliminado exitosamente');
+      }).catch((err: any) => {
+        toast.error(err?.message ?? 'No se pudo eliminar el producto');
+      });
     }
   };
 
@@ -604,7 +630,8 @@ export default function AdminInventory() {
                           className="border-border"
                           onClick={() => {
                             setEditingProduct(product);
-                            setImagePreview(product.image || '');
+                            const imgs = product.images && product.images.length > 0 ? product.images : [product.image || ''];
+                            setImagePreviews([...imgs, '', '', ''].slice(0, 4));
                             setCustomImagePreviews({
                               front: product.customizationImages?.front || '',
                               back: product.customizationImages?.back || '',
@@ -854,62 +881,49 @@ export default function AdminInventory() {
               )}
 
               <div>
-                <Label htmlFor="add-image">URL de la Imagen</Label>
-                <Input
-                  id="add-image"
-                  value={newProduct.image}
-                  onChange={(e) => setNewProduct({ ...newProduct, image: e.target.value })}
-                  className="bg-secondary border-border text-white"
-                  placeholder="https://example.com/image.jpg"
-                />
-
-                <div className="mt-4">
-                  <Label htmlFor="add-imageUpload">O Subir Imagen</Label>
-                  <div className="mt-2">
-                    <label 
-                      htmlFor="add-imageUpload" 
-                      className="flex items-center justify-center w-full px-4 py-8 border-2 border-dashed border-border rounded-lg cursor-pointer bg-secondary hover:bg-secondary/80 transition-colors"
-                    >
-                      <div className="text-center">
-                        <Upload className="mx-auto h-12 w-12 text-muted-foreground" />
-                        <p className="mt-2 text-sm text-muted-foreground">
-                          Haz clic para subir o arrastra y suelta
-                        </p>
-                        <p className="text-xs text-muted-foreground">
-                          PNG, JPG, GIF hasta 5MB
-                        </p>
-                      </div>
-                      <input
-                        id="add-imageUpload"
-                        type="file"
-                        className="hidden"
-                        accept="image/*"
-                        onChange={handleImageUpload}
-                      />
-                    </label>
-                  </div>
-
-                  {imagePreview && !isEditModalOpen && (
-                    <div className="mt-4 relative">
-                      <div className="relative w-full h-48 bg-secondary rounded-lg overflow-hidden">
-                        <img
-                          src={imagePreview}
-                          alt="Preview"
-                          className="w-full h-full object-cover"
-                        />
-                        <button
-                          type="button"
-                          onClick={clearImagePreview}
-                          className="absolute top-2 right-2 p-1 bg-black/70 hover:bg-black rounded-full transition-colors"
+                <Label>Fotos del Producto (hasta 4)</Label>
+                <p className="text-xs text-muted-foreground mb-3">La primera foto es la principal</p>
+                <div className="grid grid-cols-2 gap-3">
+                  {[0, 1, 2, 3].map((slotIndex) => (
+                    <div key={slotIndex} className="relative">
+                      {imagePreviews[slotIndex] ? (
+                        <div className="relative aspect-square bg-secondary rounded-lg overflow-hidden">
+                          <img
+                            src={imagePreviews[slotIndex]}
+                            alt={`Foto ${slotIndex + 1}`}
+                            className="w-full h-full object-cover"
+                          />
+                          <button
+                            type="button"
+                            onClick={() => clearProductImage(slotIndex)}
+                            className="absolute top-1 right-1 p-1 bg-black/70 hover:bg-black rounded-full transition-colors"
+                          >
+                            <X className="h-3 w-3 text-white" />
+                          </button>
+                          {slotIndex === 0 && (
+                            <span className="absolute bottom-1 left-1 bg-black/70 text-white text-xs px-1.5 py-0.5 rounded">Principal</span>
+                          )}
+                        </div>
+                      ) : (
+                        <label
+                          htmlFor={`add-img-${slotIndex}`}
+                          className="flex flex-col items-center justify-center aspect-square border-2 border-dashed border-border rounded-lg cursor-pointer bg-secondary hover:bg-secondary/80 transition-colors"
                         >
-                          <X className="h-4 w-4 text-white" />
-                        </button>
-                      </div>
-                      <p className="mt-2 text-sm text-muted-foreground">
-                        Imagen subida exitosamente
-                      </p>
+                          <Upload className="h-6 w-6 text-muted-foreground mb-1" />
+                          <span className="text-xs text-muted-foreground">
+                            {slotIndex === 0 ? 'Principal' : `Foto ${slotIndex + 1}`}
+                          </span>
+                          <input
+                            id={`add-img-${slotIndex}`}
+                            type="file"
+                            className="hidden"
+                            accept="image/*"
+                            onChange={(e) => handleProductImageUpload(slotIndex, e)}
+                          />
+                        </label>
+                      )}
                     </div>
-                  )}
+                  ))}
                 </div>
               </div>
 
@@ -1336,62 +1350,49 @@ export default function AdminInventory() {
               )}
 
               <div>
-                <Label htmlFor="edit-image">URL de la Imagen</Label>
-                <Input
-                  id="edit-image"
-                  value={editingProduct?.image || ''}
-                  onChange={(e) => setEditingProduct({ ...editingProduct, image: e.target.value })}
-                  className="bg-secondary border-border text-white"
-                  placeholder="https://example.com/image.jpg"
-                />
-                
-                <div className="mt-4">
-                  <Label htmlFor="edit-imageUpload">O Subir Imagen</Label>
-                  <div className="mt-2">
-                    <label 
-                      htmlFor="edit-imageUpload" 
-                      className="flex items-center justify-center w-full px-4 py-8 border-2 border-dashed border-border rounded-lg cursor-pointer bg-secondary hover:bg-secondary/80 transition-colors"
-                    >
-                      <div className="text-center">
-                        <Upload className="mx-auto h-12 w-12 text-muted-foreground" />
-                        <p className="mt-2 text-sm text-muted-foreground">
-                          Haz clic para subir o arrastra y suelta
-                        </p>
-                        <p className="text-xs text-muted-foreground">
-                          PNG, JPG, GIF hasta 5MB
-                        </p>
-                      </div>
-                      <input
-                        id="edit-imageUpload"
-                        type="file"
-                        className="hidden"
-                        accept="image/*"
-                        onChange={handleImageUpload}
-                      />
-                    </label>
-                  </div>
-
-                  {imagePreview && isEditModalOpen && (
-                    <div className="mt-4 relative">
-                      <div className="relative w-full h-48 bg-secondary rounded-lg overflow-hidden">
-                        <img
-                          src={imagePreview}
-                          alt="Preview"
-                          className="w-full h-full object-cover"
-                        />
-                        <button
-                          type="button"
-                          onClick={clearImagePreview}
-                          className="absolute top-2 right-2 p-1 bg-black/70 hover:bg-black rounded-full transition-colors"
+                <Label>Fotos del Producto (hasta 4)</Label>
+                <p className="text-xs text-muted-foreground mb-3">La primera foto es la principal</p>
+                <div className="grid grid-cols-2 gap-3">
+                  {[0, 1, 2, 3].map((slotIndex) => (
+                    <div key={slotIndex} className="relative">
+                      {imagePreviews[slotIndex] ? (
+                        <div className="relative aspect-square bg-secondary rounded-lg overflow-hidden">
+                          <img
+                            src={imagePreviews[slotIndex]}
+                            alt={`Foto ${slotIndex + 1}`}
+                            className="w-full h-full object-cover"
+                          />
+                          <button
+                            type="button"
+                            onClick={() => clearProductImage(slotIndex)}
+                            className="absolute top-1 right-1 p-1 bg-black/70 hover:bg-black rounded-full transition-colors"
+                          >
+                            <X className="h-3 w-3 text-white" />
+                          </button>
+                          {slotIndex === 0 && (
+                            <span className="absolute bottom-1 left-1 bg-black/70 text-white text-xs px-1.5 py-0.5 rounded">Principal</span>
+                          )}
+                        </div>
+                      ) : (
+                        <label
+                          htmlFor={`edit-img-${slotIndex}`}
+                          className="flex flex-col items-center justify-center aspect-square border-2 border-dashed border-border rounded-lg cursor-pointer bg-secondary hover:bg-secondary/80 transition-colors"
                         >
-                          <X className="h-4 w-4 text-white" />
-                        </button>
-                      </div>
-                      <p className="mt-2 text-sm text-muted-foreground">
-                        Imagen subida exitosamente
-                      </p>
+                          <Upload className="h-6 w-6 text-muted-foreground mb-1" />
+                          <span className="text-xs text-muted-foreground">
+                            {slotIndex === 0 ? 'Principal' : `Foto ${slotIndex + 1}`}
+                          </span>
+                          <input
+                            id={`edit-img-${slotIndex}`}
+                            type="file"
+                            className="hidden"
+                            accept="image/*"
+                            onChange={(e) => handleProductImageUpload(slotIndex, e)}
+                          />
+                        </label>
+                      )}
                     </div>
-                  )}
+                  ))}
                 </div>
               </div>
 
@@ -1578,7 +1579,7 @@ export default function AdminInventory() {
                 onClick={() => {
                   setIsEditModalOpen(false);
                   setEditingProduct(null);
-                  setImagePreview('');
+                  setImagePreviews(['', '', '', '']);
                 }}
                 className="border-border"
               >
@@ -1632,7 +1633,7 @@ export default function AdminInventory() {
                 </p>
                 <div className="flex flex-wrap gap-2">
                   {availableSubcategories.map((s) => {
-                    const isDefault = isDefaultSubcategory(s.value);
+                    const isDefault = s.is_default;
                     return (
                       <span
                         key={s.value}

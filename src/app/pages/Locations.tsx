@@ -16,11 +16,11 @@ export default function Locations() {
         <div className="absolute bottom-10 right-10 w-64 h-64 bg-white rounded-full blur-3xl animate-pulse" style={{ animationDelay: '1.3s' }}></div>
       </div>
       
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 relative z-10">
+      <div className="max-w-7xl mx-auto px-6 sm:px-6 lg:px-8 relative z-10">
         {/* Header */}
-        <div className="text-center mb-12">
-          <h1 className="text-4xl md:text-5xl font-bold mb-4">Nuestras Ubicaciones</h1>
-          <p className="text-muted-foreground text-lg">
+        <div className="text-center mb-8 md:mb-12">
+          <h1 className="text-3xl sm:text-4xl md:text-5xl font-bold mb-3 md:mb-4">Nuestras Ubicaciones</h1>
+          <p className="text-muted-foreground text-base md:text-lg">
             Visítanos en cualquiera de nuestras tiendas físicas
           </p>
         </div>

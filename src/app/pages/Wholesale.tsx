@@ -11,17 +11,17 @@ export default function Wholesale() {
         <div className="absolute bottom-10 right-10 w-64 h-64 bg-white rounded-full blur-3xl animate-pulse" style={{ animationDelay: '1.5s' }}></div>
       </div>
 
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 relative z-10">
+      <div className="max-w-7xl mx-auto px-6 sm:px-6 lg:px-8 relative z-10">
         {/* Header */}
-        <div className="text-center mb-12">
-          <h1 className="text-4xl md:text-5xl font-bold mb-4">Precios al Por Mayor</h1>
-          <p className="text-xl text-muted-foreground">
+        <div className="text-center mb-8 md:mb-12">
+          <h1 className="text-3xl sm:text-4xl md:text-5xl font-bold mb-3 md:mb-4">Precios al Por Mayor</h1>
+          <p className="text-base md:text-xl text-muted-foreground">
             Ahorra comprando en cantidad - ¡Es así de simple!
           </p>
         </div>
 
         {/* Main Info Card */}
-        <div className="bg-gradient-to-br from-[#2A2A2A] to-[#1C1C1C] border-2 border-white/20 rounded-2xl p-8 mb-12 hover:border-white/40 transition-all duration-300 hover:shadow-2xl hover:shadow-white/10 relative overflow-hidden">
+        <div className="bg-gradient-to-br from-[#2A2A2A] to-[#1C1C1C] border-2 border-white/20 rounded-2xl p-6 sm:p-8 mb-8 md:mb-12 hover:border-white/40 transition-all duration-300 hover:shadow-2xl hover:shadow-white/10 relative overflow-hidden">
           <div className="absolute inset-0 bg-gradient-to-br from-white/5 to-transparent opacity-0 hover:opacity-100 transition-opacity duration-300"></div>
 
           <div className="relative z-10">
@@ -41,7 +41,7 @@ export default function Wholesale() {
                 <div className="text-center mb-4">
                   <p className="text-muted-foreground mb-2">Precio Regular</p>
                   <p className="text-sm text-muted-foreground mb-4">(1-5 productos)</p>
-                  <div className="text-5xl font-bold text-white">$9</div>
+                  <div className="text-4xl md:text-5xl font-bold text-white">$9</div>
                   <p className="text-muted-foreground mt-2">por unidad</p>
                 </div>
               </div>
@@ -56,7 +56,7 @@ export default function Wholesale() {
                 <div className="text-center mb-4">
                   <p className="text-green-400 font-semibold mb-2">Precio al Por Mayor</p>
                   <p className="text-sm text-green-300/80 mb-4">(6+ productos)</p>
-                  <div className="text-5xl font-bold text-green-400">$6.50</div>
+                  <div className="text-4xl md:text-5xl font-bold text-green-400">$6.50</div>
                   <p className="text-green-300/80 mt-2">por unidad</p>
                 </div>
                 <div className="bg-green-500/20 border border-green-500/30 rounded-lg p-3 mt-4">
