@@ -15,6 +15,7 @@ import {
 } from 'recharts';
 import type { Order, OrderStatus } from '../types';
 import { getRetailUnitPrice } from '../lib/pricing';
+import { SelfReviewPanel } from '../lib/selfReview';
 
 type Range = 'today' | 'week' | 'month' | 'year';
 
@@ -232,6 +233,7 @@ export default function AdminDashboard() {
 
   return (
     <div className="px-4 lg:px-6 py-5 space-y-4 max-w-[1600px]">
+      <SelfReviewPanel />
       {/* Selector de rango */}
       <div className="inline-flex rounded-lg border border-[#e6e6e9] bg-[#f1f1f3] p-1">
         {RANGES.map((r) => (

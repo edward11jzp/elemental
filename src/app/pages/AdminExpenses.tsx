@@ -21,6 +21,7 @@ import {
 } from '../lib/adminData';
 import { fmt, todayVe } from '../lib/sales';
 import { compressImage, parseReceipt, readReceipt } from '../lib/receiptOcr';
+import { SelfReviewBadge } from '../lib/selfReview';
 
 type Tab = 'resumen' | ExpenseType;
 const tip = { borderRadius: 8, border: '1px solid #e6e6e9', fontSize: 12, background: '#fff', color: '#111' };
@@ -252,7 +253,7 @@ function TypeTab({ type, list, rate, onNew, onEdit, onDeleted }: { type: Expense
             <tr key={e.id}>
               <td className="text-[12px] text-[#6b7280] whitespace-nowrap">{e.date}</td>
               <td><span className="rounded-md border border-[#e6e6e9] bg-[#f4f4f5] px-2 py-0.5 text-[11px] whitespace-nowrap">{e.category}</span></td>
-              <td>{e.description}</td>
+              <td>{e.description} <SelfReviewBadge refId={String(e.id)} /></td>
               <td className="text-[#6b7280]">{e.supplier || '—'}</td>
               <td className="text-[#6b7280] whitespace-nowrap text-[12px]">{accLabel(e)}</td>
               <td className="font-semibold text-[#dc2626] whitespace-nowrap">{fmt(e.amount)}</td>

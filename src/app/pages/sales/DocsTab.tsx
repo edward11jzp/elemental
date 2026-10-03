@@ -3,6 +3,7 @@ import { toast } from 'sonner';
 import { Btn, Card, Chip, Input, Select, Table } from '../../components/admin/ui';
 import { docLabel, fmt, payState, PAY_STATES, saleDateLabel, setSalePay, todayVe, veDay, voidSale, type PayState, type Sale } from '../../lib/sales';
 import type { SalesCtx } from '../AdminSales';
+import { SelfReviewBadge } from '../../lib/selfReview';
 
 export default function DocsTab({ ctx }: { ctx: SalesCtx }) {
   const [q, setQ] = useState('');
@@ -60,7 +61,7 @@ export default function DocsTab({ ctx }: { ctx: SalesCtx }) {
             const canEdit = isAdmin || veDay(s.date) === todayVe();
             return (
               <tr key={s.id} className="cursor-pointer hover:bg-[#fafafa]" onClick={() => ctx.openInvoice(s.id)}>
-                <td className="font-semibold whitespace-nowrap">{s.id}</td>
+                <td className="font-semibold whitespace-nowrap">{s.id} <SelfReviewBadge refId={s.id} /></td>
                 <td><span className="rounded-md border border-[#e6e6e9] bg-[#f4f4f5] px-2 py-0.5 text-[11px] whitespace-nowrap">{docLabel(s.doc)}</span></td>
                 <td className="text-[12px] text-[#6b7280] whitespace-nowrap">{saleDateLabel(s.date)}</td>
                 <td>{s.customer || 'Consumidor final'}</td>

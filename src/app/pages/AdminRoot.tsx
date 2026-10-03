@@ -4,6 +4,7 @@ import { useApp } from '../context';
 import { AdminOrderNotifier } from '../components/AdminOrderNotifier';
 import AdminShell from '../components/AdminShell';
 import { PermsProvider, isStaffRole, moduleOfPath, usePerms } from '../lib/perms';
+import { SelfReviewProvider } from '../lib/selfReview';
 
 // Cada ruta pertenece a un módulo; quien no tenga permiso para ese módulo
 // va a la primera sección que sí puede ver (matriz en Usuarios y permisos).
@@ -49,7 +50,9 @@ function Guard() {
 export default function AdminRoot() {
   return (
     <PermsProvider>
-      <Guard />
+      <SelfReviewProvider>
+        <Guard />
+      </SelfReviewProvider>
     </PermsProvider>
   );
 }
