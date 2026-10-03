@@ -1,4 +1,5 @@
 import { Outlet } from 'react-router';
+import { Suspense } from 'react';
 import Navigation from '../components/Navigation';
 import MarqueeBanner from '../components/MarqueeBanner';
 import Footer from '../components/Footer';
@@ -6,6 +7,15 @@ import ScrollToTop from '../components/ScrollToTop';
 import { ScrollProgress } from '../components/animations/ScrollProgress';
 import { FloatingWhatsApp } from '../components/FloatingWhatsApp';
 import backgroundImage from 'figma:asset/aea30adc924240815831e87ef3429993d8977f69.png';
+
+// Loader simple para rutas lazy. Evita layout shift y da feedback inmediato.
+function RouteFallback() {
+  return (
+    <div className="min-h-[60vh] flex items-center justify-center">
+      <div className="h-8 w-8 border-2 border-white/20 border-t-white rounded-full animate-spin" />
+    </div>
+  );
+}
 
 export default function Root() {
   return (
@@ -33,7 +43,9 @@ export default function Root() {
           <Navigation />
           <MarqueeBanner />
           <main>
-            <Outlet />
+            <Suspense fallback={<RouteFallback />}>
+              <Outlet />
+            </Suspense>
           </main>
           <Footer />
         </div>

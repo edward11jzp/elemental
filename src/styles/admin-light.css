@@ -1,0 +1,90 @@
+/*
+ * Tema claro del panel de administración.
+ * Se activa poniendo la clase `admin-light` en <html> (lo hace AdminShell).
+ * Remapea las variables del tema y las de color de Tailwind para que las
+ * páginas admin existentes (escritas para fondo negro) se vean en claro
+ * sin tener que reescribir cada clase.
+ */
+html.admin-light {
+  color-scheme: light;
+
+  --background: #f6f6f7;
+  --foreground: #111111;
+  --card: #ffffff;
+  --card-foreground: #111111;
+  --popover: #ffffff;
+  --popover-foreground: #111111;
+  --primary: #111111;
+  --primary-foreground: #ffffff;
+  --secondary: #f1f1f3;
+  --secondary-foreground: #111111;
+  --muted: #f1f1f3;
+  --muted-foreground: #6b7280;
+  --accent: #ececef;
+  --accent-foreground: #111111;
+  --border: #e6e6e9;
+  --input: #e6e6e9;
+  --input-background: #ffffff;
+  --ring: #a1a1aa;
+
+  /* Blanco/negro invertidos: bg-black = fondo claro, text-white = texto oscuro */
+  --color-black: #f6f6f7;
+  --color-white: #111111;
+
+  /* Grises invertidos */
+  --color-gray-50: #111827;
+  --color-gray-100: #1f2937;
+  --color-gray-200: #374151;
+  --color-gray-300: #4b5563;
+  --color-gray-400: #6b7280;
+  --color-gray-500: #6b7280;
+  --color-gray-600: #9ca3af;
+  --color-gray-700: #d1d5db;
+  --color-gray-800: #e5e7eb;
+  --color-gray-900: #f3f4f6;
+
+  /* Colores de estado: tonos claros → oscuros para que se lean sobre blanco */
+  --color-yellow-200: #a16207;
+  --color-yellow-300: #a16207;
+  --color-yellow-400: #ca8a04;
+  --color-yellow-500: #eab308;
+  --color-yellow-800: #fef9c3;
+  --color-yellow-900: #fef08a;
+
+  --color-green-200: #15803d;
+  --color-green-300: #15803d;
+  --color-green-400: #16a34a;
+  --color-green-800: #dcfce7;
+  --color-green-900: #bbf7d0;
+
+  --color-blue-200: #1d4ed8;
+  --color-blue-300: #1d4ed8;
+  --color-blue-400: #2563eb;
+  --color-blue-800: #dbeafe;
+  --color-blue-900: #bfdbfe;
+
+  --color-purple-200: #7e22ce;
+  --color-purple-300: #7e22ce;
+  --color-purple-400: #9333ea;
+  --color-purple-800: #f3e8ff;
+  --color-purple-900: #e9d5ff;
+
+  --color-red-200: #b91c1c;
+  --color-red-300: #b91c1c;
+  --color-red-400: #dc2626;
+  --color-red-800: #fee2e2;
+  --color-red-900: #fecaca;
+
+  --color-orange-300: #c2410c;
+  --color-orange-400: #ea580c;
+  --color-orange-900: #fed7aa;
+
+  --color-emerald-300: #047857;
+  --color-emerald-400: #059669;
+  --color-emerald-900: #a7f3d0;
+}
+
+html.admin-light body {
+  background: #f6f6f7;
+  color: #111111;
+}

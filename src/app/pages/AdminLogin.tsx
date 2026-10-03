@@ -5,6 +5,7 @@ import { Button } from '../components/ui/button';
 import { Input } from '../components/ui/input';
 import { Label } from '../components/ui/label';
 import { toast } from 'sonner';
+import { isStaffRole } from '../lib/perms';
 
 export default function AdminLogin() {
   const [mode, setMode] = useState<'login' | 'setup'>('login');
@@ -56,8 +57,8 @@ export default function AdminLogin() {
       // Resolve role from the Supabase session (login() already set currentUser)
       const { getCurrentUser } = await import('../lib/auth');
       const u = await getCurrentUser();
-      const isEmployee = u?.role === 'employee';
       const isAdmin = u?.role === 'admin';
+      const isEmployee = !isAdmin && isStaffRole(u?.role);
       if (!isEmployee && !isAdmin) {
         toast.error('Tu cuenta no tiene permisos de administración');
         const { signOut } = await import('../lib/auth');
@@ -67,7 +68,7 @@ export default function AdminLogin() {
       toast.success(
         isEmployee ? '¡Personal Administrativo conectado!' : '¡Administrador conectado!',
       );
-      navigate(isEmployee ? '/admin/orders' : '/admin/dashboard');
+      navigate(isEmployee ? '/admin/orders' : '/admin/dashboard'); // el guard lo lleva a su primera sección permitida
     } finally {
       setLoading(false);
     }

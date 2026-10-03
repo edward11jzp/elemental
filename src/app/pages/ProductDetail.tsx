@@ -1,5 +1,7 @@
 import { useParams, Link, useNavigate } from 'react-router';
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
+import { getCustomizationImages } from '../lib/products';
+import type { Product } from '../types';
 import { useApp } from '../context';
 import { Button } from '../components/ui/button';
 import { Label } from '../components/ui/label';
@@ -179,6 +181,13 @@ export default function ProductDetail() {
   const { addToCart, products, cartItemCount } = useApp();
 
   const product = products.find(p => p.id === id);
+  // Las vistas de personalización se piden sólo para este producto (son pesadas).
+  const [customViews, setCustomViews] = useState<Product['customizationImages']>(undefined);
+  useEffect(() => {
+    setCustomViews(undefined);
+    if (!id || !product?.allowCustom) return;
+    getCustomizationImages(id).then(setCustomViews).catch(() => {});
+  }, [id, product?.allowCustom]);
   const [selectedSize, setSelectedSize] = useState('');
   const [isSizeGuideOpen, setIsSizeGuideOpen] = useState(false);
   const [selectedColor, setSelectedColor] = useState('');
@@ -452,8 +461,9 @@ export default function ProductDetail() {
 
   const getShirtImageForView = (view: 'front' | 'back' | 'sleeves') => {
     // First priority: use product-specific customization images if available
-    if (product.customizationImages) {
-      const customImage = product.customizationImages[view];
+    const views = customViews ?? product.customizationImages;
+    if (views) {
+      const customImage = views[view];
       if (customImage) {
         return customImage;
       }

@@ -1,7 +1,7 @@
 import { Link } from 'react-router';
 import { ArrowRight } from 'lucide-react';
 import { motion, useScroll, useTransform } from 'motion/react';
-import { useRef } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { Button } from '../components/ui/button';
 import { useApp } from '../context';
 import { Reveal } from '../components/animations/Reveal';
@@ -9,8 +9,10 @@ import { TextReveal } from '../components/animations/TextReveal';
 import { ParallaxImage } from '../components/animations/ParallaxImage';
 import { MagneticButton } from '../components/animations/MagneticButton';
 import { CustomizationSteps } from '../components/CustomizationSteps';
+import { ProductGridSkeleton } from '../components/ProductCardSkeleton';
+import HowItsMade from '../components/HowItsMade';
 import logo from 'figma:asset/480ee1658c29520edefebbfe9dcbc0d422f8424b.png';
-import heroImage from 'figma:asset/d562ab79e646ba503bef3f9807ee4a9fffec1d55.png';
+import heroImage from '../../assets/hero.jpg';
 import hatImage from 'figma:asset/1b3b90e9f13e6f0bfe2e2ccee076db293bf3180e.png';
 import hoodieImage from 'figma:asset/000b79075e554c3caa9cda5c12cfc602e256af3d.png';
 import menImage from 'figma:asset/d34a77067b13abc7af031b55d2f7ac2a556ba76a.png';
@@ -21,10 +23,25 @@ import featuredBg from '../../assets/20230807_175751.jpg';
 const easeOut = [0.16, 1, 0.3, 1] as const;
 
 export default function Home() {
-  const { products, siteSettings } = useApp();
+  const { products, productsLoading, siteSettings } = useApp();
   const featuredProducts = products.filter(p => p.featured);
+  // Mostrar la sección si hay destacados O si estamos cargando con caché vacía.
+  // Si ya cargamos y no hay destacados, ocultamos.
+  const showFeaturedSection = featuredProducts.length > 0 || (productsLoading && products.length === 0);
 
-  // Hero parallax setup
+  // Detecta móvil para desactivar el parallax JS (es choppy en iOS Safari).
+  // En móvil dejamos scroll nativo, mucho más suave.
+  const [isMobile, setIsMobile] = useState<boolean>(() =>
+    typeof window !== 'undefined' ? window.matchMedia('(max-width: 767px)').matches : false
+  );
+  useEffect(() => {
+    const mq = window.matchMedia('(max-width: 767px)');
+    const handler = (e: MediaQueryListEvent) => setIsMobile(e.matches);
+    mq.addEventListener('change', handler);
+    return () => mq.removeEventListener('change', handler);
+  }, []);
+
+  // Hero parallax setup (solo desktop)
   const heroRef = useRef<HTMLDivElement>(null);
   const { scrollYProgress: heroProgress } = useScroll({
     target: heroRef,
@@ -34,6 +51,12 @@ export default function Home() {
   const heroImageScale = useTransform(heroProgress, [0, 1], [1, 1.2]);
   const heroContentY = useTransform(heroProgress, [0, 1], ['0%', '-30%']);
   const heroContentOpacity = useTransform(heroProgress, [0, 0.7, 1], [1, 0.6, 0]);
+
+  // Fallback del eslogan si Supabase no lo trae todavía o llega vacío.
+  const tagline =
+    siteSettings.tagline && siteSettings.tagline.trim().length > 0
+      ? siteSettings.tagline
+      : 'Redefine Tu Estilo. Atrevido. Minimalista. Sin Disculpas.';
 
   const categories = [
     { to: '/shop/gorras', label: 'GORRAS', image: hatImage, scale: 'scale-150 group-hover:scale-[1.65]', objectFit: 'object-contain', alignTop: true },
@@ -47,14 +70,33 @@ export default function Home() {
     <div className="bg-black">
       {/* Hero Section with Parallax */}
       <section ref={heroRef} className="relative h-[700px] flex items-center justify-center overflow-hidden">
-        {/* Parallax background image */}
-        <motion.div
-          className="absolute inset-0 will-change-transform"
-          style={{ y: heroImageY, scale: heroImageScale }}
-        >
-          <img src={heroImage} alt="Streetwear Hero" className="w-full h-full object-cover" />
-          <div className="absolute inset-0 bg-black/40" />
-        </motion.div>
+        {/* Background image — parallax solo en desktop (en móvil queda estático para scroll nativo suave) */}
+        {isMobile ? (
+          <div className="absolute inset-0">
+            <img
+              src={heroImage}
+              alt="Streetwear Hero"
+              fetchPriority="high"
+              decoding="async"
+              className="w-full h-full object-cover"
+            />
+            <div className="absolute inset-0 bg-black/40" />
+          </div>
+        ) : (
+          <motion.div
+            className="absolute inset-0 will-change-transform"
+            style={{ y: heroImageY, scale: heroImageScale }}
+          >
+            <img
+              src={heroImage}
+              alt="Streetwear Hero"
+              fetchPriority="high"
+              decoding="async"
+              className="w-full h-full object-cover"
+            />
+            <div className="absolute inset-0 bg-black/40" />
+          </motion.div>
+        )}
 
         {/* Animated background glows */}
         <div className="absolute inset-0 opacity-20 pointer-events-none">
@@ -70,10 +112,10 @@ export default function Home() {
           />
         </div>
 
-        {/* Hero content with scroll fade */}
+        {/* Hero content with scroll fade — fade desactivado en móvil */}
         <motion.div
           className="relative text-center px-10 sm:px-8 md:px-4 z-10 max-w-[320px] sm:max-w-md md:max-w-3xl mx-auto"
-          style={{ y: heroContentY, opacity: heroContentOpacity }}
+          style={isMobile ? undefined : { y: heroContentY, opacity: heroContentOpacity }}
         >
           <motion.img
             src={logo}
@@ -83,13 +125,15 @@ export default function Home() {
             animate={{ opacity: 1, scale: 1, filter: 'blur(0px)' }}
             transition={{ duration: 2.2, ease: easeOut }}
           />
-          <TextReveal
-            as="p"
-            text={siteSettings.tagline}
+          {/* Tagline: fade simple en vez de TextReveal para evitar bugs de overflow/whileInView en móvil */}
+          <motion.p
             className="text-sm sm:text-base md:text-2xl text-muted-foreground mb-6 md:mb-8 max-w-3xl mx-auto tracking-wide leading-snug"
-            delay={1.2}
-            staggerChildren={0.14}
-          />
+            initial={{ opacity: 0, y: 12 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 1.2, delay: 1.0, ease: easeOut }}
+          >
+            {tagline}
+          </motion.p>
           <motion.div
             initial={{ opacity: 0, y: 40 }}
             animate={{ opacity: 1, y: 0 }}
@@ -120,6 +164,9 @@ export default function Home() {
           />
         </motion.div>
       </section>
+
+      {/* How It's Made — scrollytelling premium (justo después del hero) */}
+      <HowItsMade />
 
       {/* Customization Steps Banner */}
       <CustomizationSteps />
@@ -165,7 +212,7 @@ export default function Home() {
                   <div className="mb-4">
                     <div className="flex items-baseline justify-center">
                       <span className="text-5xl md:text-6xl font-bold bg-gradient-to-r from-white to-white/70 bg-clip-text text-transparent">$9</span>
-                      <span className="text-xl md:text-2xl text-muted-foreground ml-2">/pieza</span>
+                      <span className="text-xl md:text-2xl text-muted-foreground ml-2">/ Franela</span>
                     </div>
                   </div>
                   <div className="h-px bg-gradient-to-r from-transparent via-white/20 to-transparent mb-4" />
@@ -194,7 +241,7 @@ export default function Home() {
                   <div className="mb-4">
                     <div className="flex items-baseline justify-center">
                       <span className="text-5xl md:text-6xl font-bold bg-gradient-to-r from-black via-[#1C1C1C] to-black bg-clip-text text-transparent">$6.5</span>
-                      <span className="text-xl md:text-2xl text-[#2A2A2A] ml-2">/pieza</span>
+                      <span className="text-xl md:text-2xl text-[#2A2A2A] ml-2">/ Franela</span>
                     </div>
                   </div>
                   <div className="h-px bg-gradient-to-r from-transparent via-black/20 to-transparent mb-4" />
@@ -235,6 +282,8 @@ export default function Home() {
                         <img
                           src={cat.image}
                           alt={cat.label}
+                          loading="lazy"
+                          decoding="async"
                           className={`w-full h-auto ${cat.objectFit} ${cat.scale} transition-transform duration-700`}
                         />
                       </div>
@@ -242,6 +291,8 @@ export default function Home() {
                       <img
                         src={cat.image}
                         alt={cat.label}
+                        loading="lazy"
+                        decoding="async"
                         className={`w-full h-full ${cat.objectFit} ${cat.scale} transition-transform duration-700`}
                         style={cat.translateY ? { transform: `translateY(${cat.translateY})` } : undefined}
                       />
@@ -266,7 +317,7 @@ export default function Home() {
       </section>
 
       {/* Featured Products */}
-      {featuredProducts.length > 0 && (
+      {showFeaturedSection && (
         <section className="relative py-12 md:py-20 overflow-hidden">
           <div className="absolute inset-0 opacity-10 pointer-events-none">
             <motion.div
@@ -292,6 +343,10 @@ export default function Home() {
 
           <div className="relative max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 z-10">
             <TextReveal as="h2" text="Productos Destacados" className="text-3xl md:text-4xl mb-8 md:mb-12 tracking-tight" staggerChildren={0.15} />
+            {/* Skeletons mientras cargan los productos sin caché previa */}
+            {productsLoading && products.length === 0 ? (
+              <ProductGridSkeleton count={4} />
+            ) : (
             <div className="grid grid-cols-2 md:grid-cols-4 gap-3 md:gap-6">
               {featuredProducts.map((product, i) => (
                 <Reveal key={product.id} direction="up" delay={i * 0.12} duration={1.2} distance={70}>
@@ -305,6 +360,8 @@ export default function Home() {
                         <img
                           src={product.image}
                           alt={product.name}
+                          loading="lazy"
+                          decoding="async"
                           className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-700"
                         />
                       </div>
@@ -317,6 +374,7 @@ export default function Home() {
                 </Reveal>
               ))}
             </div>
+            )}
           </div>
         </section>
       )}

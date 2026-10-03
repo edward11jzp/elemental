@@ -1,37 +1,55 @@
 import { Outlet, useLocation, useNavigate } from 'react-router';
-import { useEffect } from 'react';
+import { Suspense, useEffect } from 'react';
 import { useApp } from '../context';
+import { AdminOrderNotifier } from '../components/AdminOrderNotifier';
+import AdminShell from '../components/AdminShell';
+import { PermsProvider, isStaffRole, moduleOfPath, usePerms } from '../lib/perms';
 
-// Routes only admins can access. Employees can only see /admin/orders.
-const ADMIN_ONLY_PATHS = [
-  '/admin/dashboard',
-  '/admin/inventory',
-  '/admin/users',
-  '/admin/locations',
-  '/admin/social',
-  '/admin/payment-info',
-  '/admin/settings',
-];
-
-export default function AdminRoot() {
+// Cada ruta pertenece a un módulo; quien no tenga permiso para ese módulo
+// va a la primera sección que sí puede ver (matriz en Usuarios y permisos).
+function Guard() {
   const { currentUser } = useApp();
   const { pathname } = useLocation();
   const navigate = useNavigate();
+  const { can, ready, firstAllowedPath } = usePerms();
+  const isPublic = pathname === '/admin' || pathname === '/admin/login';
 
   useEffect(() => {
-    // Public admin routes (login + index landing)
-    const isPublic = pathname === '/admin' || pathname === '/admin/login';
     if (isPublic) return;
-
-    if (!currentUser) {
+    if (!currentUser || !isStaffRole(currentUser.role)) {
       navigate('/admin/login');
       return;
     }
+    if (!ready) return;
+    const mod = moduleOfPath(pathname);
+    if (mod && !can(mod)) navigate(firstAllowedPath());
+  }, [currentUser, pathname, navigate, ready, can, firstAllowedPath, isPublic]);
 
-    if (currentUser.role === 'employee' && ADMIN_ONLY_PATHS.some((p) => pathname.startsWith(p))) {
-      navigate('/admin/orders');
-    }
-  }, [currentUser, pathname, navigate]);
+  const content = (
+    <Suspense
+      fallback={
+        <div className="min-h-[60vh] flex items-center justify-center">
+          <div className="h-8 w-8 border-2 border-white/20 border-t-white rounded-full animate-spin" />
+        </div>
+      }
+    >
+      <Outlet />
+    </Suspense>
+  );
 
-  return <Outlet />;
+  return (
+    <>
+      {/* Sonido + notificación del navegador cuando entra una orden nueva */}
+      <AdminOrderNotifier />
+      {isPublic || !currentUser ? content : <AdminShell>{content}</AdminShell>}
+    </>
+  );
+}
+
+export default function AdminRoot() {
+  return (
+    <PermsProvider>
+      <Guard />
+    </PermsProvider>
+  );
 }

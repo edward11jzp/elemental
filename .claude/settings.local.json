@@ -11,7 +11,31 @@
       "Bash(mkdir -p /tmp/elemental-make)",
       "Bash(unzip -q \"/Users/edwardzambranoperez/Downloads/Build website from prompt.make\" -d /tmp/elemental-make/)",
       "Read(//tmp/**)",
-      "Bash(ls /tmp/elemental-make/images/ | head -30 && echo \"--- count:\" && ls /tmp/elemental-make/images/ | wc -l)"
+      "Bash(ls /tmp/elemental-make/images/ | head -30 && echo \"--- count:\" && ls /tmp/elemental-make/images/ | wc -l)",
+      "Bash(npm run *)",
+      "Bash(sort -k2 -hr)",
+      "Bash(sort -k5 -nr)",
+      "Bash(vercel --prod --yes)",
+      "Bash(curl -s -o /dev/null -w \"Home          HTTP %{http_code} | %{time_total}s\\\\n\" https://elementalfabrica.com)",
+      "Bash(curl -s -o /dev/null -w \"Tracking      HTTP %{http_code} | %{time_total}s\\\\n\" \"https://elementalfabrica.com/revisar-pedido\")",
+      "Bash(curl -s -o /dev/null -w \"Wholesale     HTTP %{http_code} | %{time_total}s\\\\n\" https://elementalfabrica.com/wholesale)",
+      "Bash(curl -s -o /dev/null -w \"Supabase API  HTTP %{http_code} | %{time_total}s\\\\n\" https://ufsentuwygpcejtuknqb.supabase.co/rest/v1/)",
+      "Bash(grep -n \"stageHeight\\\\|STAGES.length\\\\|100dvh\\\\|dvh\\\\`\" src/app/components/HowItsMade.tsx)",
+      "Bash(grep -n \"channel\\('public:orders'\\)\\\\|useEffect\\(\\(\\) => {\\\\s*$\" src/app/context.tsx)",
+      "Bash(ffmpeg -i \"/Users/edwardzambranoperez/Downloads/ScreenRecording_09-07-2026 17-09-38_1.MP4\")",
+      "Bash(ffmpeg -i \"/Users/edwardzambranoperez/Downloads/ScreenRecording_09-07-2026 17-09-38_1.MP4\" -vf \"fps=1/2,scale=380:-1\" /private/tmp/claude-502/-Users-edwardzambranoperez-elemental/b7cf9387-0cd4-43d3-82d7-70b7162f7a45/scratchpad/frames/frame_%03d.jpg -y)",
+      "Bash(ffmpeg -i \"/Users/edwardzambranoperez/Downloads/ScreenRecording_09-07-2026 17-09-38_1.MP4\" -ss 24 -t 8 -vf \"fps=4,scale=380:-1\" /private/tmp/claude-502/-Users-edwardzambranoperez-elemental/b7cf9387-0cd4-43d3-82d7-70b7162f7a45/scratchpad/frames/crash_%03d.jpg -y)",
+      "Bash(ffmpeg -i \"/Users/edwardzambranoperez/Downloads/ScreenRecording_09-07-2026 17-09-38_1.MP4\" -ss 15 -t 10 -vf \"fps=4,scale=380:-1\" /private/tmp/claude-502/-Users-edwardzambranoperez-elemental/b7cf9387-0cd4-43d3-82d7-70b7162f7a45/scratchpad/frames/crash2_%03d.jpg -y)",
+      "Bash(ffmpeg -i \"/Users/edwardzambranoperez/Downloads/ScreenRecording_09-07-2026 17-09-38_1.MP4\" -ss 20.3 -t 1.5 -vf \"fps=15,scale=380:-1\" /private/tmp/claude-502/-Users-edwardzambranoperez-elemental/b7cf9387-0cd4-43d3-82d7-70b7162f7a45/scratchpad/frames/fine_%03d.jpg -y)",
+      "Bash(python3 -c ' *)",
+      "Bash(sed -i '' 's/bg-red-500 text-white text-\\\\[10px\\\\] font-bold \\\\[color:#fff\\\\]/bg-red-500 text-[10px] font-bold [color:#fff]/' src/app/components/AdminShell.tsx)",
+      "Bash(python3 -)",
+      "Bash(npx tsc *)",
+      "Bash(perl -pi -e 's/text-\\\\[9px\\\\] font-medium tracking-\\\\[0.1em\\\\] text-\\\\[#52525b\\\\] truncate/text-[9px] font-medium tracking-[0.08em] leading-tight text-[#52525b]/' src/app/pages/AdminDashboard.tsx)",
+      "Bash(perl -0pi -e 's/ \\\\/\\\\/ TMP_PREVIEW\\\\n.*?\\\\/\\\\/ TMP_PREVIEW//s' src/app/context.tsx)",
+      "Bash(vercel ls *)",
+      "Bash(ls ~ | head -50; find ~ -maxdepth 3 -iname \"*bendito*\" -not -path \"*/Library/*\" 2>/dev/null | head)",
+      "Bash(grep -oE \"api\\\\\\('[a-zA-Z_/-]+'|fetch\\\\\\(['\\\\`][^'\\\\`]+\" admin.html)"
     ]
   }
 }

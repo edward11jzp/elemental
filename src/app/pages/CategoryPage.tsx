@@ -1,8 +1,11 @@
 import { useParams, Link } from 'react-router';
 import { useApp } from '../context';
+import { ProductGridSkeleton } from '../components/ProductCardSkeleton';
 
 export default function CategoryPage() {
-  const { products: allProducts } = useApp();
+  const { products: allProducts, productsLoading } = useApp();
+  // En la primera carga sin caché, mostramos esqueletos en vez de "no encontramos".
+  const isInitialLoad = productsLoading && allProducts.length === 0;
   const { subcategory } = useParams<{ subcategory: string }>();
   const pathSegments = window.location.pathname.split('/').filter(Boolean);
   const firstSegment = pathSegments[0];
@@ -67,11 +70,15 @@ export default function CategoryPage() {
             {pageTitle}
           </h1>
           <p className="text-muted-foreground">
-            {products.length} {products.length === 1 ? 'producto' : 'productos'}
+            {isInitialLoad
+              ? 'Cargando productos…'
+              : `${products.length} ${products.length === 1 ? 'producto' : 'productos'}`}
           </p>
         </div>
 
-        {products.length === 0 ? (
+        {isInitialLoad ? (
+          <ProductGridSkeleton count={10} />
+        ) : products.length === 0 ? (
           <div className="text-center py-12">
             <p className="text-muted-foreground mb-4">No se encontraron productos en esta categoría.</p>
             <Link to="/" className="text-white hover:underline">

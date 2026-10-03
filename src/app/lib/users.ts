@@ -51,7 +51,7 @@ export async function createStaff(
   email: string,
   password: string,
   name: string,
-  role: 'admin' | 'employee',
+  role: string,
   phone?: string,
 ): Promise<void> {
   const client = getSignupClient();
@@ -84,7 +84,7 @@ export async function setUserActive(userId: string, active: boolean): Promise<vo
 
 export async function setUserRole(
   userId: string,
-  role: 'admin' | 'employee' | 'customer',
+  role: string,
   name?: string,
   phone?: string,
 ): Promise<void> {

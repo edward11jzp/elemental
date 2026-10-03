@@ -20,7 +20,7 @@ const normalize = (s: string) =>
   s.toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '').trim();
 
 export default function Navigation() {
-  const { cartItemCount, searchQuery, setSearchQuery, products, subcategories } = useApp();
+  const { cartItemCount, searchQuery, setSearchQuery, products, productsLoading, subcategories } = useApp();
   const navigate = useNavigate();
   const [showSearch, setShowSearch] = useState(false);
   const [menOpen, setMenOpen] = useState(false);
@@ -58,8 +58,15 @@ export default function Navigation() {
   }, [products]);
 
   // Helper: subcategorías visibles para una categoría raíz dada.
-  const visibleSubsFor = (gender: 'men' | 'women' | 'kids') =>
-    subcategories.filter((s) => availableByCategory[gender].has(s.value));
+  //
+  // Mientras los productos no han llegado de Supabase, mostramos TODAS las
+  // subcategorías (no podemos saber cuáles están vacías todavía y vale más
+  // mostrar de más que tener un menú en blanco). Una vez cargados, filtramos
+  // las que no tengan producto publicado.
+  const visibleSubsFor = (gender: 'men' | 'women' | 'kids') => {
+    if (productsLoading || products.length === 0) return subcategories;
+    return subcategories.filter((s) => availableByCategory[gender].has(s.value));
+  };
 
   // Build matching results from categories, subcategories and product names.
   type Result =
@@ -141,15 +148,19 @@ export default function Navigation() {
               {menOpen && (
                 <div className="absolute left-0 top-full pt-2 w-48 apple-fade-in-up">
                   <div className="bg-secondary border border-border rounded-md shadow-lg py-2 apple-accelerate">
-                    {visibleSubsFor('men').map((s) => (
-                      <Link
-                        key={s.value}
-                        to={`/men/${s.value}`}
-                        className="block px-4 py-2 text-white hover:bg-accent apple-transition"
-                      >
-                        {s.label}
-                      </Link>
-                    ))}
+                    {visibleSubsFor('men').length === 0 ? (
+                      <div className="px-4 py-2 text-xs text-muted-foreground">Cargando…</div>
+                    ) : (
+                      visibleSubsFor('men').map((s) => (
+                        <Link
+                          key={s.value}
+                          to={`/men/${s.value}`}
+                          className="block px-4 py-2 text-white hover:bg-accent apple-transition"
+                        >
+                          {s.label}
+                        </Link>
+                      ))
+                    )}
                   </div>
                 </div>
               )}
@@ -167,15 +178,19 @@ export default function Navigation() {
               {womenOpen && (
                 <div className="absolute left-0 top-full pt-2 w-48 apple-fade-in-up">
                   <div className="bg-secondary border border-border rounded-md shadow-lg py-2 apple-accelerate">
-                    {visibleSubsFor('women').map((s) => (
-                      <Link
-                        key={s.value}
-                        to={`/women/${s.value}`}
-                        className="block px-4 py-2 text-white hover:bg-accent apple-transition"
-                      >
-                        {s.label}
-                      </Link>
-                    ))}
+                    {visibleSubsFor('women').length === 0 ? (
+                      <div className="px-4 py-2 text-xs text-muted-foreground">Cargando…</div>
+                    ) : (
+                      visibleSubsFor('women').map((s) => (
+                        <Link
+                          key={s.value}
+                          to={`/women/${s.value}`}
+                          className="block px-4 py-2 text-white hover:bg-accent apple-transition"
+                        >
+                          {s.label}
+                        </Link>
+                      ))
+                    )}
                   </div>
                 </div>
               )}
@@ -193,15 +208,19 @@ export default function Navigation() {
               {kidsOpen && (
                 <div className="absolute left-0 top-full pt-2 w-48 apple-fade-in-up">
                   <div className="bg-secondary border border-border rounded-md shadow-lg py-2 apple-accelerate">
-                    {visibleSubsFor('kids').map((s) => (
-                      <Link
-                        key={s.value}
-                        to={`/kids/${s.value}`}
-                        className="block px-4 py-2 text-white hover:bg-accent apple-transition"
-                      >
-                        {s.label}
-                      </Link>
-                    ))}
+                    {visibleSubsFor('kids').length === 0 ? (
+                      <div className="px-4 py-2 text-xs text-muted-foreground">Cargando…</div>
+                    ) : (
+                      visibleSubsFor('kids').map((s) => (
+                        <Link
+                          key={s.value}
+                          to={`/kids/${s.value}`}
+                          className="block px-4 py-2 text-white hover:bg-accent apple-transition"
+                        >
+                          {s.label}
+                        </Link>
+                      ))
+                    )}
                   </div>
                 </div>
               )}
@@ -335,104 +354,55 @@ export default function Navigation() {
         {mobileMenuOpen && (
           <div className="md:hidden border-t border-secondary max-h-[calc(100vh-4rem)] overflow-y-auto overscroll-contain">
             <div className="py-2">
-              {/* Caballeros */}
-              {visibleSubsFor('men').length > 0 && (
-                <div className="border-b border-secondary/50">
-                  <button
-                    type="button"
-                    onClick={() => toggleMobileSection('men')}
-                    aria-expanded={mobileSection === 'men'}
-                    className="w-full flex items-center justify-between px-4 py-3 text-white font-semibold active:bg-secondary/60 transition-colors"
-                  >
-                    <span>Caballeros</span>
-                    <ChevronDown
-                      className={`h-5 w-5 transition-transform duration-200 ${
-                        mobileSection === 'men' ? 'rotate-180' : ''
-                      }`}
-                    />
-                  </button>
-                  {mobileSection === 'men' && (
-                    <div className="pb-2">
-                      {visibleSubsFor('men').map((s) => (
-                        <Link
-                          key={s.value}
-                          to={`/men/${s.value}`}
-                          className="block px-8 py-2.5 text-muted-foreground active:text-white active:bg-secondary/60 transition-colors"
-                          onClick={closeMobileMenu}
-                        >
-                          {s.label}
-                        </Link>
-                      ))}
-                    </div>
-                  )}
-                </div>
-              )}
-
-              {/* Damas */}
-              {visibleSubsFor('women').length > 0 && (
-                <div className="border-b border-secondary/50">
-                  <button
-                    type="button"
-                    onClick={() => toggleMobileSection('women')}
-                    aria-expanded={mobileSection === 'women'}
-                    className="w-full flex items-center justify-between px-4 py-3 text-white font-semibold active:bg-secondary/60 transition-colors"
-                  >
-                    <span>Damas</span>
-                    <ChevronDown
-                      className={`h-5 w-5 transition-transform duration-200 ${
-                        mobileSection === 'women' ? 'rotate-180' : ''
-                      }`}
-                    />
-                  </button>
-                  {mobileSection === 'women' && (
-                    <div className="pb-2">
-                      {visibleSubsFor('women').map((s) => (
-                        <Link
-                          key={s.value}
-                          to={`/women/${s.value}`}
-                          className="block px-8 py-2.5 text-muted-foreground active:text-white active:bg-secondary/60 transition-colors"
-                          onClick={closeMobileMenu}
-                        >
-                          {s.label}
-                        </Link>
-                      ))}
-                    </div>
-                  )}
-                </div>
-              )}
-
-              {/* Niños */}
-              {visibleSubsFor('kids').length > 0 && (
-                <div className="border-b border-secondary/50">
-                  <button
-                    type="button"
-                    onClick={() => toggleMobileSection('kids')}
-                    aria-expanded={mobileSection === 'kids'}
-                    className="w-full flex items-center justify-between px-4 py-3 text-white font-semibold active:bg-secondary/60 transition-colors"
-                  >
-                    <span>Niños</span>
-                    <ChevronDown
-                      className={`h-5 w-5 transition-transform duration-200 ${
-                        mobileSection === 'kids' ? 'rotate-180' : ''
-                      }`}
-                    />
-                  </button>
-                  {mobileSection === 'kids' && (
-                    <div className="pb-2">
-                      {visibleSubsFor('kids').map((s) => (
-                        <Link
-                          key={s.value}
-                          to={`/kids/${s.value}`}
-                          className="block px-8 py-2.5 text-muted-foreground active:text-white active:bg-secondary/60 transition-colors"
-                          onClick={closeMobileMenu}
-                        >
-                          {s.label}
-                        </Link>
-                      ))}
-                    </div>
-                  )}
-                </div>
-              )}
+              {/* Las 3 secciones de género — SIEMPRE se renderizan (no
+                  ocultarlas durante el primer fetch evita que el menú
+                  parezca vacío). Si una subcategoría no tiene productos
+                  publicados, ya queda filtrada por visibleSubsFor(). */}
+              {([
+                { gender: 'men' as const, label: 'Caballeros' },
+                { gender: 'women' as const, label: 'Damas' },
+                { gender: 'kids' as const, label: 'Niños' },
+              ]).map(({ gender, label }) => {
+                const subs = visibleSubsFor(gender);
+                const expanded = mobileSection === gender;
+                return (
+                  <div key={gender} className="border-b border-secondary/50">
+                    <button
+                      type="button"
+                      onClick={() => toggleMobileSection(gender)}
+                      aria-expanded={expanded}
+                      className="w-full flex items-center justify-between px-4 py-3 text-white font-semibold active:bg-secondary/60 transition-colors"
+                    >
+                      <span>{label}</span>
+                      <ChevronDown
+                        className={`h-5 w-5 transition-transform duration-200 ${
+                          expanded ? 'rotate-180' : ''
+                        }`}
+                      />
+                    </button>
+                    {expanded && (
+                      <div className="pb-2">
+                        {subs.length === 0 ? (
+                          <div className="px-8 py-3 text-xs text-muted-foreground">
+                            Cargando subcategorías…
+                          </div>
+                        ) : (
+                          subs.map((s) => (
+                            <Link
+                              key={s.value}
+                              to={`/${gender}/${s.value}`}
+                              className="block px-8 py-2.5 text-muted-foreground active:text-white active:bg-secondary/60 transition-colors"
+                              onClick={closeMobileMenu}
+                            >
+                              {s.label}
+                            </Link>
+                          ))
+                        )}
+                      </div>
+                    )}
+                  </div>
+                );
+              })}
 
               {/* Wholesale */}
               <Link

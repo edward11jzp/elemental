@@ -45,3 +45,24 @@ export async function deleteProductImage(url: string): Promise<void> {
   const path = url.slice(idx + marker.length);
   await supabase.storage.from(BUCKET).remove([path]);
 }
+
+// Sube una imagen conservando la transparencia (mockups de personalización).
+// Redimensiona a 1600px y la guarda en WebP (o PNG si el navegador no codifica WebP).
+export async function uploadImageKeepAlpha(source: Blob): Promise<string> {
+  const bmp = await createImageBitmap(source);
+  const k = Math.min(1, 1600 / Math.max(bmp.width, bmp.height));
+  const c = document.createElement('canvas');
+  c.width = Math.round(bmp.width * k);
+  c.height = Math.round(bmp.height * k);
+  c.getContext('2d')!.drawImage(bmp, 0, 0, c.width, c.height);
+  const blob: Blob = await new Promise((ok, fail) =>
+    c.toBlob((b) => (b ? ok(b) : fail(new Error('No se pudo procesar la imagen'))), 'image/webp', 0.9),
+  );
+  const ext = blob.type === 'image/webp' ? 'webp' : 'png';
+  const path = `products/custom-${Date.now()}-${Math.random().toString(36).slice(2, 10)}.${ext}`;
+  const { error } = await supabase.storage
+    .from(BUCKET)
+    .upload(path, blob, { cacheControl: '31536000', upsert: false, contentType: blob.type });
+  if (error) throw error;
+  return supabase.storage.from(BUCKET).getPublicUrl(path).data.publicUrl;
+}

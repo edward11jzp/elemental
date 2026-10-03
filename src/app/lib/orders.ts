@@ -27,6 +27,9 @@ function rowToOrder(row: any): Order {
     fulfillmentType:  row.fulfillment_type ?? undefined,
     pickupLocationId: row.pickup_location_id ?? undefined,
     pickupLocationName: row.pickup_location_name ?? undefined,
+    dueDate:          row.due_date ?? undefined,
+    history:          row.history ?? [],
+    source:           row.source ?? 'web',
     createdAt:        row.created_at,
     updatedAt:        row.updated_at,
   } as Order;
@@ -53,15 +56,19 @@ function orderToRow(o: Order) {
   };
 }
 
-// Customer: place a new order (no auth required)
+// Customer: place a new order (no auth required).
+// NO usamos .select() aquí: el cliente anónimo no tiene política SELECT en
+// `orders` (solo staff via is_staff()), y un INSERT...RETURNING requiere esa
+// misma politica para poder "leer" la fila insertada. Sin esto, TODO insert
+// anónimo fallaba con "new row violates row-level security policy" — el
+// cliente ya tiene el objeto `order` completo en memoria, no hace falta
+// leerlo de vuelta de la base.
 export async function createOrder(order: Order): Promise<Order> {
-  const { data, error } = await supabase
+  const { error } = await supabase
     .from('orders')
-    .insert(orderToRow(order))
-    .select()
-    .single();
+    .insert(orderToRow(order));
   if (error) throw error;
-  return rowToOrder(data);
+  return order;
 }
 
 // Staff: list all orders, newest first
@@ -89,4 +96,18 @@ export async function getOrderById(orderId: string): Promise<Order | null> {
   if (error) throw error;
   if (!data || data.length === 0) return null;
   return rowToOrder(data[0]);
+}
+
+// Staff: fecha de entrega comprometida.
+export async function setDueDate(orderId: string, dueDate: string | null): Promise<void> {
+  const { error } = await supabase.from('orders').update({ due_date: dueDate }).eq('id', orderId);
+  if (error) throw error;
+}
+
+// Staff: pedido creado a mano desde el panel (WhatsApp, teléfono, tienda).
+export async function createAdminOrder(order: Order): Promise<void> {
+  const { error } = await supabase
+    .from('orders')
+    .insert({ ...orderToRow(order), due_date: order.dueDate ?? null, source: 'admin' });
+  if (error) throw error;
 }

@@ -1,7 +1,6 @@
 import { useApp } from '../context';
 import { useNavigate } from 'react-router';
 import { useEffect, useState } from 'react';
-import AdminNav from '../components/AdminNav';
 import { Button } from '../components/ui/button';
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '../components/ui/dialog';
 import { toast } from 'sonner';
@@ -93,7 +92,6 @@ export default function AdminPaymentInfo() {
 
   return (
     <div className="bg-black min-h-screen">
-      <AdminNav />
 
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-12">
         <div className="flex justify-between items-center mb-8">

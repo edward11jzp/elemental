@@ -1,26 +1,42 @@
-import { createBrowserRouter, redirect } from "react-router";
+import { createBrowserRouter } from "react-router";
+import { lazy } from "react";
 import Root from "./pages/Root";
 import Home from "./pages/Home";
+
+// Páginas críticas del flujo de compra → eager (entran en el bundle inicial)
 import CategoryPage from "./pages/CategoryPage";
 import ProductDetail from "./pages/ProductDetail";
 import Cart from "./pages/Cart";
 import Checkout from "./pages/Checkout";
-import Locations from "./pages/Locations";
-import About from "./pages/About";
-import Contact from "./pages/Contact";
-import Wholesale from "./pages/Wholesale";
-import TrackOrder from "./pages/TrackOrder";
-import AdminRoot from "./pages/AdminRoot";
-import AdminLogin from "./pages/AdminLogin";
-import AdminDashboard from "./pages/AdminDashboard";
-import AdminInventory from "./pages/AdminInventory";
-import AdminOrders from "./pages/AdminOrders";
-import AdminUsers from "./pages/AdminUsers";
-import AdminLocations from "./pages/AdminLocations";
-import AdminSocialMedia from "./pages/AdminSocialMedia";
-import AdminPaymentInfo from "./pages/AdminPaymentInfo";
-import AdminSettings from "./pages/AdminSettings";
 import NotFound from "./pages/NotFound";
+
+// Páginas secundarias del cliente → lazy (un chunk aparte por cada una)
+const Locations = lazy(() => import("./pages/Locations"));
+const About = lazy(() => import("./pages/About"));
+const Contact = lazy(() => import("./pages/Contact"));
+const Wholesale = lazy(() => import("./pages/Wholesale"));
+const TrackOrder = lazy(() => import("./pages/TrackOrder"));
+
+// Todo el admin → lazy (los clientes nunca lo descargan)
+const AdminRoot = lazy(() => import("./pages/AdminRoot"));
+const AdminLogin = lazy(() => import("./pages/AdminLogin"));
+const AdminDashboard = lazy(() => import("./pages/AdminDashboard"));
+const AdminInventory = lazy(() => import("./pages/AdminInventory"));
+const AdminOrders = lazy(() => import("./pages/AdminOrders"));
+const AdminUsers = lazy(() => import("./pages/AdminUsers"));
+const AdminLocations = lazy(() => import("./pages/AdminLocations"));
+const AdminSocialMedia = lazy(() => import("./pages/AdminSocialMedia"));
+const AdminPaymentInfo = lazy(() => import("./pages/AdminPaymentInfo"));
+const AdminSettings = lazy(() => import("./pages/AdminSettings"));
+const AdminFinance = lazy(() => import("./pages/AdminFinance"));
+const AdminSales = lazy(() => import("./pages/AdminSales"));
+const AdminExpenses = lazy(() => import("./pages/AdminExpenses"));
+const AdminCustomers = lazy(() => import("./pages/AdminCustomers"));
+const AdminAccounts = lazy(() => import("./pages/AdminAccounts"));
+const AdminStaff = lazy(() => import("./pages/AdminStaff"));
+const AdminPayConf = lazy(() => import("./pages/AdminPayConf"));
+const AdminSuppliers = lazy(() => import("./pages/AdminSuppliers"));
+const AdminAudit = lazy(() => import("./pages/AdminAudit"));
 
 export const router = createBrowserRouter([
   {
@@ -57,6 +73,15 @@ export const router = createBrowserRouter([
       { path: "social", Component: AdminSocialMedia },
       { path: "payment-info", Component: AdminPaymentInfo },
       { path: "settings", Component: AdminSettings },
+      { path: "finance", Component: AdminFinance },
+      { path: "sales", Component: AdminSales },
+      { path: "expenses", Component: AdminExpenses },
+      { path: "customers", Component: AdminCustomers },
+      { path: "accounts", Component: AdminAccounts },
+      { path: "staff", Component: AdminStaff },
+      { path: "payconf", Component: AdminPayConf },
+      { path: "suppliers", Component: AdminSuppliers },
+      { path: "audit", Component: AdminAudit },
     ],
   },
 ]);

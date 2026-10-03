@@ -17,7 +17,16 @@ import {
 } from '../lib/pricing';
 
 export default function Checkout() {
-  const { cart, cartTotal, addOrder, clearCart, cartItemCount, paymentInfo, locations, siteSettings } = useApp();
+  const { cart, cartTotal, addOrder, clearCart, cartItemCount, paymentInfo, locations, siteSettings, socialMedia } = useApp();
+
+  // Número de WhatsApp del negocio. Se toma del primer entry activo en
+  // socialMedia (configurable desde Admin → Redes). Fallback al default
+  // por si todavía no se configuró.
+  const WHATSAPP_DEFAULT = 'https://wa.me/584124777970';
+  const businessWhatsAppUrl =
+    socialMedia.find((s) => s.platform === 'whatsapp' && s.active)?.url ?? WHATSAPP_DEFAULT;
+  // Extrae el número limpio (ej. 584124777970) del URL para construir wa.me con texto.
+  const businessWhatsAppNumber = (businessWhatsAppUrl.match(/wa\.me\/(\d+)/)?.[1]) ?? '584124777970';
 
   // Conversión a bolívares. Si la tasa no está configurada o es inválida → ocultamos la línea.
   const exchangeRate = siteSettings.exchangeRate;
@@ -53,6 +62,10 @@ export default function Checkout() {
     hasCustom: boolean;
     customerName: string;
     customerPhone: string;
+    // Para construir el mensaje de WhatsApp post-checkout:
+    paymentMethod: PaymentMethod;
+    paymentProof: string;
+    items: typeof cart;
   } | null>(null);
   const [customNoticeOpen, setCustomNoticeOpen] = useState(false);
 
@@ -98,7 +111,7 @@ export default function Checkout() {
     e.stopPropagation();
   };
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
 
     if (!formData.name || !formData.email) {
@@ -147,10 +160,32 @@ export default function Checkout() {
     };
 
     const hasCustom = cart.some((item) => item.isCustom);
+    // Capturamos el snapshot del carrito ANTES de clearCart() para que la
+    // pantalla de confirmación (y el mensaje de WhatsApp) tengan los items.
+    const itemsSnapshot = cart.slice();
 
-    addOrder(order);
+    // Feedback inmediato: bloqueamos re-envío mientras persiste en Supabase.
+    const savingToastId = toast.loading('Procesando tu pedido…');
+    try {
+      await addOrder(order);
+    } catch (err: any) {
+      console.error('Order save failed:', err);
+      toast.error(
+        err?.message
+          ? `No pudimos registrar tu pedido: ${err.message}. Por favor intenta de nuevo.`
+          : 'No pudimos registrar tu pedido. Por favor intenta de nuevo.',
+        { id: savingToastId },
+      );
+      // El carrito NO se limpia y NO se muestra confirmación. El cliente puede
+      // reintentar sin perder sus productos ni el comprobante subido.
+      return;
+    }
+
+    // Solo si el guardado fue exitoso: limpiamos carrito y mostramos confirmación.
     clearCart();
-    toast.success('¡Pedido realizado! Te enviaremos confirmación por correo.');
+    toast.success('¡Pedido realizado! Te enviaremos confirmación por correo.', {
+      id: savingToastId,
+    });
     setConfirmation({
       orderId: order.id,
       email: formData.email,
@@ -158,6 +193,9 @@ export default function Checkout() {
       hasCustom,
       customerName: formData.name,
       customerPhone: formData.phone,
+      paymentMethod,
+      paymentProof,
+      items: itemsSnapshot,
     });
     if (hasCustom) setCustomNoticeOpen(true);
     window.scrollTo({ top: 0, behavior: 'smooth' });
@@ -232,6 +270,61 @@ export default function Checkout() {
               </div>
             </div>
           )}
+
+          {/* WhatsApp: el cliente envía un mensaje pre-armado al admin con
+              los datos de su pedido. Tiene que adjuntar el comprobante en el
+              chat de forma manual (WhatsApp no soporta adjuntos via deep
+              link), por eso el mensaje se lo recuerda. */}
+          {(() => {
+            const c = confirmation;
+            const paymentLabels: Record<string, string> = {
+              card: 'Tarjeta',
+              zelle: 'Zelle',
+              binance: 'Binance',
+              pago_movil: 'Pago Móvil',
+              bank_transfer: 'Transferencia',
+              colombia_pesos: 'Pesos Colombianos',
+            };
+            const itemLines = c.items
+              .map((it) => `• ${it.product.name} (${it.size} / ${it.color}) × ${it.quantity}`)
+              .join('\n');
+            const msg = [
+              `Hola Elemental! 👋`,
+              ``,
+              `Acabo de realizar un pedido y quiero confirmarlo.`,
+              ``,
+              `📦 N° de pedido: ${c.orderId}`,
+              `👤 Nombre: ${c.customerName}`,
+              `📞 Teléfono: ${c.customerPhone || '—'}`,
+              `💳 Pago: ${paymentLabels[c.paymentMethod] ?? c.paymentMethod}`,
+              `💰 Total: $${c.total.toFixed(2)}`,
+              ``,
+              `🛍️ Pedido:`,
+              itemLines,
+              ``,
+              `¡Gracias!`,
+            ].join('\n');
+            const waHref = `https://wa.me/${businessWhatsAppNumber}?text=${encodeURIComponent(msg)}`;
+            return (
+              <div className="mb-3 bg-[#25D366]/10 border border-[#25D366]/40 rounded-lg p-4 text-left">
+                <p className="text-sm font-semibold text-[#25D366] mb-2">
+                  📲 Envía tu pedido por WhatsApp
+                </p>
+                <p className="text-xs text-white/70 mb-3">
+                  Para agilizar la confirmación, mándanos el resumen y adjunta el comprobante
+                  en el mismo chat.
+                </p>
+                <a
+                  href={waHref}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="inline-flex items-center justify-center gap-2 bg-[#25D366] hover:bg-[#1ebe5b] text-white font-semibold rounded-full px-5 py-3 text-sm w-full transition-colors"
+                >
+                  Abrir WhatsApp con mi pedido
+                </a>
+              </div>
+            );
+          })()}
 
           <div className="space-y-2">
             <Link to={`/revisar-pedido?id=${encodeURIComponent(confirmation.orderId)}`}>

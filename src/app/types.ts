@@ -14,6 +14,9 @@ export interface Product {
   colors: string[];
   colorPalette?: string[];
   stock: number;
+  minStock?: number; // Alerta de inventario bajo
+  location?: string; // Ubicación física (almacén, estante…)
+  supplier?: string; // Proveedor (nombre)
   allowCustom: boolean;
   customPricing?: {
     small: number; // Precio para S, M
@@ -73,10 +76,13 @@ export interface Order {
   notes?: string;
   paymentMethod?: PaymentMethod;
   paymentProof?: string; // URL o base64 de la imagen del comprobante
+  dueDate?: string; // Fecha de entrega comprometida (AAAA-MM-DD)
+  history?: { label: string; at: string; by?: string | null }[];
+  source?: 'web' | 'admin';
 }
 
 // User Types
-export type UserRole = 'customer' | 'employee' | 'admin';
+export type UserRole = 'customer' | 'employee' | 'admin' | 'manager' | 'production' | 'sales' | 'support';
 
 export interface User {
   id: string;

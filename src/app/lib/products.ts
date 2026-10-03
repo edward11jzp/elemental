@@ -17,6 +17,9 @@ function rowToProduct(row: any): Product {
     colors:             row.colors ?? [],
     colorPalette:       row.color_palette ?? [],
     stock:              row.stock ?? 0,
+    minStock:           row.min_stock ?? 50,
+    location:           row.location ?? '',
+    supplier:           row.supplier ?? '',
     allowCustom:        row.allow_custom ?? false,
     customPricing:      row.custom_pricing ?? undefined,
     featured:           row.featured ?? false,
@@ -40,6 +43,9 @@ function productToRow(p: Partial<Product> & { name: string }) {
   if (p.colors !== undefined)             row.colors               = p.colors;
   if (p.colorPalette !== undefined)       row.color_palette        = p.colorPalette;
   if (p.stock !== undefined)              row.stock                = p.stock;
+  if (p.minStock !== undefined)           row.min_stock            = p.minStock;
+  if (p.location !== undefined)           row.location             = p.location;
+  if (p.supplier !== undefined)           row.supplier             = p.supplier;
   if (p.allowCustom !== undefined)        row.allow_custom         = p.allowCustom;
   if (p.customPricing !== undefined)      row.custom_pricing       = p.customPricing;
   if (p.featured !== undefined)           row.featured             = p.featured;
@@ -48,10 +54,23 @@ function productToRow(p: Partial<Product> & { name: string }) {
   return row;
 }
 
+// Todas las columnas MENOS customization_images: algunas filas guardan esas
+// vistas en base64 (varios MB cada una) y bajarlas en la lista hacía que la
+// tienda y el inventario cargaran ~18 MB. Se piden aparte con getCustomizationImages().
+const LIST_COLUMNS =
+  'id,name,category,subcategory,description,retail_price,wholesale_price,image,images,sizes,colors,' +
+  'color_palette,stock,min_stock,location,supplier,allow_custom,custom_pricing,featured,trending,created_at,updated_at';
+
+export async function getCustomizationImages(id: string): Promise<Product['customizationImages']> {
+  const { data, error } = await supabase.from('products').select('customization_images').eq('id', id).single();
+  if (error) throw error;
+  return data?.customization_images ?? undefined;
+}
+
 export async function listProducts(): Promise<Product[]> {
   const { data, error } = await supabase
     .from('products')
-    .select('*')
+    .select(LIST_COLUMNS)
     .order('created_at', { ascending: true });
   if (error) throw error;
   return (data ?? []).map(rowToProduct);

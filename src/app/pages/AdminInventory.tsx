@@ -1,7 +1,6 @@
 import { useApp } from '../context';
 import { useNavigate } from 'react-router';
 import { useEffect, useState } from 'react';
-import AdminNav from '../components/AdminNav';
 import { Button } from '../components/ui/button';
 import { Input } from '../components/ui/input';
 import { Pencil, Trash2, Upload, X, Star, ChevronDown, ChevronUp, Plus, Ruler } from 'lucide-react';
@@ -17,6 +16,11 @@ import { Label } from '../components/ui/label';
 import { Textarea } from '../components/ui/textarea';
 import { toast } from 'sonner';
 import { PALETTE as AVAILABLE_COLORS } from '../colors';
+import { loadProductCosts, saveProductCost } from '../lib/adminData';
+import { getCustomizationImages } from '../lib/products';
+import { usePerms } from '../lib/perms';
+import { listSuppliers, type Supplier } from '../lib/suppliers';
+import { HeavyImagesBanner, InventoryPanels, LowStockBanner, MovementModal, StockChip, isLow, listMovements, type Movement } from '../components/admin/InventoryExtras';
 import { loadSizes, saveCustomSize, deleteCustomSize, groupSizes, GROUP_LABELS, type Size, type SizeGroup } from '../sizes';
 
 export default function AdminInventory() {
@@ -27,6 +31,25 @@ export default function AdminInventory() {
   const [isAddModalOpen, setIsAddModalOpen] = useState(false);
   const [isEditModalOpen, setIsEditModalOpen] = useState(false);
   const [editingProduct, setEditingProduct] = useState<any>(null);
+  // Costo por producto (privado, tabla product_costs). Sirve para ganancias y márgenes.
+  const [costs, setCosts] = useState<Record<string, number>>({});
+  const [editCost, setEditCost] = useState('');
+  const { can } = usePerms();
+  const showCosts = can('Ganancias y costos');
+  const [suppliers, setSuppliers] = useState<Supplier[]>([]);
+  useEffect(() => { listSuppliers().then(setSuppliers).catch(() => setSuppliers([])); }, []);
+  // Movimientos de inventario y filtro de stock bajo.
+  const [lowOnly, setLowOnly] = useState(false);
+  const [movements, setMovements] = useState<Movement[]>([]);
+  const [movementFor, setMovementFor] = useState<string | null | undefined>(undefined);
+  const reloadMovements = () => listMovements().then(setMovements).catch(() => setMovements([]));
+  useEffect(() => { reloadMovements(); }, [products]);
+  useEffect(() => {
+    loadProductCosts().then(setCosts).catch(() => setCosts({}));
+  }, []);
+  useEffect(() => {
+    if (editingProduct?.id) setEditCost(costs[editingProduct.id] != null ? String(costs[editingProduct.id]) : '');
+  }, [editingProduct?.id]); // eslint-disable-line react-hooks/exhaustive-deps
   const [imagePreviews, setImagePreviews] = useState<string[]>(['', '', '', '']);
   const [newProduct, setNewProduct] = useState({
     name: '',
@@ -65,17 +88,15 @@ export default function AdminInventory() {
   useEffect(() => {
     if (!currentUser) {
       navigate('/admin/login');
-    } else if (currentUser.role !== 'admin') {
-      navigate('/admin/orders');
     }
   }, [currentUser, navigate]);
 
-  if (!currentUser || currentUser.role !== 'admin') return null;
+  if (!currentUser) return null; // el acceso por módulo lo controla AdminRoot
 
   const filteredProducts = products.filter(product => {
     const matchesSearch = product.name.toLowerCase().includes(searchTerm.toLowerCase());
     const matchesCategory = categoryFilter === 'all' || product.category === categoryFilter;
-    return matchesSearch && matchesCategory;
+    return matchesSearch && matchesCategory && (!lowOnly || isLow(product));
   });
 
   const handleAddProduct = async () => {
@@ -412,7 +433,19 @@ export default function AdminInventory() {
           ? editingProduct.sizes
           : ['S', 'M', 'L', 'XL', '2XL'],
         customizationImages: editingProduct.customizationImages,
+        minStock: Math.max(0, parseInt(String(editingProduct.minStock ?? 50)) || 0),
+        location: String(editingProduct.location ?? '').trim(),
+        supplier: String(editingProduct.supplier ?? ''),
       });
+      const newCost = editCost.trim() === '' ? null : Number(editCost);
+      if (showCosts && newCost != null && newCost >= 0 && newCost !== costs[editingProduct.id]) {
+        try {
+          await saveProductCost(editingProduct.id, newCost);
+          setCosts((c) => ({ ...c, [editingProduct.id]: newCost }));
+        } catch (e: any) {
+          toast.error('El producto se guardó, pero el costo no: ' + (e?.message ?? 'error'));
+        }
+      }
       toast.success('¡Producto actualizado exitosamente!');
     } catch (err: any) {
       toast.error(err?.message ?? 'No se pudo actualizar el producto');
@@ -453,42 +486,54 @@ export default function AdminInventory() {
     }
   };
 
-  const handleCustomizationImageUpload = (view: 'front' | 'back' | 'sleeves', e: React.ChangeEvent<HTMLInputElement>) => {
+  // Sube la imagen de personalización (vista frontal/trasera/manga) a
+  // Supabase Storage — igual que las fotos normales del producto. ANTES esto
+  // usaba FileReader.readAsDataURL() y guardaba el base64 (~1-3MB por vista)
+  // directo en la fila del producto. Con 2-3 vistas por producto, eso
+  // multiplicado por unos pocos artículos en el carrito reventaba la cuota
+  // de localStorage en Safari/iPhone (~5MB), tirando la app entera a
+  // pantalla en blanco. Ver también el fix en context.tsx: addToCart ya no
+  // guarda customizationImages en el carrito, pero la causa raíz estaba acá.
+  const handleCustomizationImageUpload = async (view: 'front' | 'back' | 'sleeves', e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
-    if (file) {
-      if (file.size > 20 * 1024 * 1024) {
-        toast.error('El tamaño de la imagen debe ser menor a 20MB');
-        return;
-      }
+    if (!file) return;
 
-      if (!file.type.startsWith('image/')) {
-        toast.error('Por favor sube un archivo de imagen');
-        return;
-      }
+    if (file.size > 20 * 1024 * 1024) {
+      toast.error('El tamaño de la imagen debe ser menor a 20MB');
+      return;
+    }
+    if (!file.type.startsWith('image/')) {
+      toast.error('Por favor sube un archivo de imagen');
+      return;
+    }
 
-      const reader = new FileReader();
-      reader.onloadend = () => {
-        const result = reader.result as string;
-        setCustomImagePreviews(prev => ({ ...prev, [view]: result }));
-        if (isEditModalOpen && editingProduct) {
-          setEditingProduct({
-            ...editingProduct,
-            customizationImages: {
-              ...editingProduct.customizationImages,
-              [view]: result
-            }
-          });
-        } else {
-          setNewProduct({
-            ...newProduct,
-            customizationImages: {
-              ...newProduct.customizationImages,
-              [view]: result
-            }
-          });
-        }
-      };
-      reader.readAsDataURL(file);
+    const toastId = toast.loading('Comprimiendo y subiendo imagen...');
+    try {
+      const { uploadImageKeepAlpha } = await import('../lib/storage');
+      const url = await uploadImageKeepAlpha(file); // conserva la transparencia del mockup
+      setCustomImagePreviews(prev => ({ ...prev, [view]: url }));
+      if (isEditModalOpen && editingProduct) {
+        setEditingProduct({
+          ...editingProduct,
+          customizationImages: {
+            ...editingProduct.customizationImages,
+            [view]: url,
+          },
+        });
+      } else {
+        setNewProduct({
+          ...newProduct,
+          customizationImages: {
+            ...newProduct.customizationImages,
+            [view]: url,
+          },
+        });
+      }
+      toast.success('Imagen subida', { id: toastId });
+    } catch (err: any) {
+      toast.error(err?.message ?? 'No se pudo subir la imagen', { id: toastId });
+    } finally {
+      e.target.value = '';
     }
   };
 
@@ -526,18 +571,25 @@ export default function AdminInventory() {
 
   return (
     <div className="bg-black min-h-screen">
-      <AdminNav />
       
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-12">
+      <div className="max-w-[1600px] px-4 lg:px-6 py-6">
         <div className="flex justify-between items-center mb-8">
           <h1 className="text-4xl">Gestión de Inventario</h1>
-          <Button 
-            onClick={() => setIsAddModalOpen(true)}
-            className="bg-white text-black hover:bg-gray-200"
-          >
-            + Agregar Producto
-          </Button>
+          <div className="flex gap-2">
+            <Button variant="outline" className="border-border" onClick={() => setMovementFor(null)}>
+              ↕ Movimiento
+            </Button>
+            <Button 
+              onClick={() => setIsAddModalOpen(true)}
+              className="bg-white text-black hover:bg-gray-200"
+            >
+              + Agregar Producto
+            </Button>
+          </div>
         </div>
+
+        <LowStockBanner products={products} active={lowOnly} onToggle={() => setLowOnly((v) => !v)} />
+        <HeavyImagesBanner />
 
         {/* Filters */}
         <div className="bg-card p-6 rounded-lg mb-6">
@@ -571,7 +623,12 @@ export default function AdminInventory() {
                   <th className="text-left p-4">Categoría</th>
                   <th className="text-left p-4">Precio Detal</th>
                   <th className="text-left p-4">Precio Mayor</th>
+                  {showCosts && <th className="text-left p-4">Costo</th>}
+                  {showCosts && <th className="text-left p-4">Margen</th>}
                   <th className="text-left p-4">Stock</th>
+                  <th className="text-left p-4">Estado</th>
+                  <th className="text-left p-4">Ubicación</th>
+                  <th className="text-left p-4">Proveedor</th>
                   <th className="text-left p-4">Personalizado</th>
                   <th className="text-center p-4">Destacado</th>
                   <th className="text-left p-4">Acciones</th>
@@ -587,7 +644,7 @@ export default function AdminInventory() {
                           alt={product.name}
                           className="w-12 h-12 object-cover rounded"
                         />
-                        <div>
+                        <div className="min-w-[160px]">
                           <p>{product.name}</p>
                           <p className="text-sm text-muted-foreground">{product.subcategory}</p>
                         </div>
@@ -596,11 +653,21 @@ export default function AdminInventory() {
                     <td className="p-4 capitalize">{product.category}</td>
                     <td className="p-4">${product.retailPrice || product.price}</td>
                     <td className="p-4 text-green-400">${product.wholesalePrice || 6.5}</td>
+                    {showCosts && <td className="p-4 text-muted-foreground">{costs[product.id] != null ? '$' + costs[product.id] : '—'}</td>}
+                    {showCosts && <td className="p-4">
+                      {costs[product.id] != null && (product.retailPrice || product.price) > 0
+                        ? Math.round((((product.retailPrice || product.price) - costs[product.id]) / (product.retailPrice || product.price)) * 100) + '%'
+                        : '—'}
+                    </td>}
                     <td className="p-4">
-                      <span className={product.stock < 50 ? 'text-red-400' : ''}>
-                        {product.stock}
+                      <span className={isLow(product) ? 'text-yellow-400 font-semibold' : ''}>
+                        {product.stock.toLocaleString('es-VE')}
                       </span>
+                      <span className="text-xs text-muted-foreground"> / {product.minStock ?? 50}</span>
                     </td>
+                    <td className="p-4"><StockChip p={product} /></td>
+                    <td className="p-4 text-sm text-muted-foreground">{product.location || '—'}</td>
+                    <td className="p-4 text-sm text-muted-foreground">{product.supplier || '—'}</td>
                     <td className="p-4">
                       {product.allowCustom ? (
                         <span className="text-green-400">Sí</span>
@@ -628,16 +695,28 @@ export default function AdminInventory() {
                           variant="outline"
                           size="sm"
                           className="border-border"
+                          title="Registrar movimiento"
+                          onClick={() => setMovementFor(product.id)}
+                        >
+                          ↕
+                        </Button>
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          className="border-border"
                           onClick={() => {
                             setEditingProduct(product);
                             const imgs = product.images && product.images.length > 0 ? product.images : [product.image || ''];
                             setImagePreviews([...imgs, '', '', ''].slice(0, 4));
-                            setCustomImagePreviews({
-                              front: product.customizationImages?.front || '',
-                              back: product.customizationImages?.back || '',
-                              sleeves: product.customizationImages?.sleeves || ''
-                            });
+                            setCustomImagePreviews({ front: '', back: '', sleeves: '' });
                             setIsEditModalOpen(true);
+                            // Las vistas de personalización no vienen en la lista (son pesadas): se piden aquí.
+                            getCustomizationImages(product.id)
+                              .then((ci) => {
+                                setEditingProduct((cur: any) => (cur && cur.id === product.id ? { ...cur, customizationImages: ci } : cur));
+                                setCustomImagePreviews({ front: ci?.front || '', back: ci?.back || '', sleeves: ci?.sleeves || '' });
+                              })
+                              .catch(() => {});
                           }}
                         >
                           <Pencil className="h-4 w-4" />
@@ -662,6 +741,15 @@ export default function AdminInventory() {
         <div className="mt-6 text-muted-foreground text-sm">
           Mostrando {filteredProducts.length} de {products.length} productos
         </div>
+
+        <InventoryPanels products={products} movements={movements} />
+        <MovementModal
+          open={movementFor !== undefined}
+          productId={movementFor}
+          products={products}
+          onClose={() => setMovementFor(undefined)}
+          onSaved={reloadMovements}
+        />
 
         {/* Add Product Dialog Content */}
         <Dialog open={isAddModalOpen} onOpenChange={setIsAddModalOpen}>
@@ -1189,6 +1277,62 @@ export default function AdminInventory() {
                   <p className="text-xs text-muted-foreground mt-1">
                     Precio para 6+ unidades
                   </p>
+                </div>
+
+                {showCosts && <div>
+                  <Label htmlFor="edit-cost">Costo por unidad ($)</Label>
+                  <Input
+                    id="edit-cost"
+                    type="number"
+                    step="0.01"
+                    min="0"
+                    value={editCost}
+                    onChange={(e) => setEditCost(e.target.value)}
+                    className="bg-secondary border-border text-white"
+                    placeholder="0.00"
+                  />
+                  <p className="text-xs text-muted-foreground mt-1">
+                    Privado. Se usa para ganancia y márgenes en Ventas.
+                  </p>
+                </div>}
+
+                <div>
+                  <Label htmlFor="edit-supplier">Proveedor</Label>
+                  <select
+                    id="edit-supplier"
+                    value={editingProduct?.supplier ?? ''}
+                    onChange={(e) => setEditingProduct({ ...editingProduct, supplier: e.target.value })}
+                    className="w-full bg-secondary border border-border rounded-md px-3 py-2 text-white"
+                  >
+                    <option value="">— Sin proveedor —</option>
+                    {suppliers.map((sp) => <option key={sp.id} value={sp.name}>{sp.name}</option>)}
+                    {editingProduct?.supplier && !suppliers.some((sp) => sp.name === editingProduct.supplier) && (
+                      <option value={editingProduct.supplier}>{editingProduct.supplier}</option>
+                    )}
+                  </select>
+                </div>
+
+                <div>
+                  <Label htmlFor="edit-minStock">Stock mínimo (alerta)</Label>
+                  <Input
+                    id="edit-minStock"
+                    type="number"
+                    min="0"
+                    value={editingProduct?.minStock ?? 50}
+                    onChange={(e) => setEditingProduct({ ...editingProduct, minStock: e.target.value })}
+                    className="bg-secondary border-border text-white"
+                  />
+                </div>
+
+                <div>
+                  <Label htmlFor="edit-location">Ubicación</Label>
+                  <Input
+                    id="edit-location"
+                    value={editingProduct?.location ?? ''}
+                    onChange={(e) => setEditingProduct({ ...editingProduct, location: e.target.value })}
+                    className="bg-secondary border-border text-white"
+                    placeholder="Ej: Almacén A · Estante 3"
+                  />
                 </div>
               </div>
 

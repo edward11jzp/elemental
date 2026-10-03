@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useState, useEffect } from 'react';
+import React, { createContext, useContext, useState, useEffect, useRef } from 'react';
 import { CartItem, Product, Order, User, Location, SocialMedia, PaymentInfo, SiteSettings } from './types';
 import { supabase } from './lib/supabase';
 import * as ordersApi from './lib/orders';
@@ -23,6 +23,9 @@ interface AppContextType {
   
   // Products
   products: Product[];
+  // true mientras el primer fetch a Supabase no termina (independiente de si
+  // tenemos data cacheada). Útil para mostrar skeletons en la primera visita.
+  productsLoading: boolean;
   addProduct: (product: Omit<Product, 'id'>) => Promise<void>;
   updateProduct: (productId: string, updates: Partial<Product>) => Promise<void>;
   deleteProduct: (productId: string) => Promise<void>;
@@ -35,15 +38,25 @@ interface AppContextType {
   // Users Management
   users: User[];
   refreshUsers: () => Promise<void>;
-  createStaffUser: (email: string, password: string, name: string, role: 'admin' | 'employee', phone?: string) => Promise<void>;
+  createStaffUser: (email: string, password: string, name: string, role: string, phone?: string) => Promise<void>;
   updateUser: (userId: string, updates: Partial<User>) => Promise<void>;
   toggleUserActive: (userId: string) => Promise<void>;
   deleteUser: (userId: string) => Promise<void>;
 
   // Orders
   orders: Order[];
-  addOrder: (order: Order) => void;
+  // Devuelve la promesa del insert a Supabase — el checkout ahora la awaits
+  // para NO mostrar confirmación al cliente si el guardado falló.
+  addOrder: (order: Order) => Promise<void>;
   updateOrderStatus: (orderId: string, status: Order['status']) => void;
+  refreshOrders: () => Promise<void>;
+  // Contador de órdenes nuevas desde la última vez que el admin visitó
+  // "Órdenes". Se muestra como badge en AdminShell.
+  newOrdersCount: number;
+  markOrdersSeen: () => void;
+  // Suscribirse a cada nueva orden que llega via Supabase Realtime — usado
+  // por AdminOrderNotifier para disparar sonido + notificación del navegador.
+  onNewOrder: (cb: (order: Order) => void) => () => void;
   
   // Locations
   locations: Location[];
@@ -225,18 +238,33 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     }
   };
 
-  // Refetch users whenever the auth session changes (admin login → load list).
+  // Refetch users solo cuando hay sesión de staff — antes esto llamaba al
+  // RPC admin_list_users para TODOS los visitantes (incluidos clientes
+  // anónimos) en cada carga de página, fallando con 400 innecesariamente.
   useEffect(() => {
+    if (!currentUser) { setUsers([]); return; }
     refreshUsers();
-    const { data: sub } = supabase.auth.onAuthStateChange(() => { refreshUsers(); });
-    return () => { sub.subscription.unsubscribe(); };
-  }, []);
+  }, [currentUser]);
 
   // Orders come from Supabase. Anonymous clients can insert but can't list
   // (RLS blocks them); only authenticated staff sees the full list.
   const [orders, setOrders] = useState<Order[]>([]);
+  const [newOrdersCount, setNewOrdersCount] = useState(0);
+  // Callbacks para notificar UI (sonido + browser Notification) cuando
+  // llega una orden por Supabase Realtime. Usamos ref para que la lista
+  // no dispare re-renders del provider al suscribirse/desuscribirse.
+  const newOrderCallbacksRef = useRef<Array<(order: Order) => void>>([]);
+  const onNewOrder = (cb: (order: Order) => void) => {
+    newOrderCallbacksRef.current = [...newOrderCallbacksRef.current, cb];
+    return () => {
+      newOrderCallbacksRef.current = newOrderCallbacksRef.current.filter((x) => x !== cb);
+    };
+  };
+  const markOrdersSeen = () => setNewOrdersCount(0);
 
   // Fetch orders whenever the auth session changes (so admin login loads them).
+  // Corre para todos los visitantes (anon incluido) pero es solo UNA petición
+  // por cambio de sesión — no es el origen del problema de performance.
   useEffect(() => {
     let cancelled = false;
     const refresh = async () => {
@@ -250,17 +278,112 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     };
     refresh();
     const { data: sub } = supabase.auth.onAuthStateChange(() => { refresh(); });
-    return () => { cancelled = true; sub.subscription.unsubscribe(); };
+    return () => {
+      cancelled = true;
+      sub.subscription.unsubscribe();
+    };
   }, []);
 
+  // Realtime de `orders`: SOLO para admin/staff autenticado.
+  //
+  // BUG CRÍTICO QUE ARREGLA ESTO: antes este canal se suscribía para TODOS
+  // los visitantes (incluyendo clientes anónimos navegando la tienda), pero
+  // la política RLS de SELECT en `orders` es is_staff() — anon no la cumple.
+  // Supabase Realtime reintentaba autorizar/reconectar ese canal sin parar
+  // en segundo plano en la sesión de CADA cliente, generando peticiones 400
+  // repetidas indefinidamente mientras la pestaña estuviera abierta. En
+  // celulares esto degradaba el rendimiento hasta el punto de congelar la
+  // página (pantalla en gris) al interactuar con el carrito. Ahora solo se
+  // abre el canal cuando hay currentUser (staff logueado) y se cierra al
+  // cerrar sesión.
+  useEffect(() => {
+    if (!currentUser) return;
+
+    const refresh = async () => {
+      try {
+        const list = await ordersApi.listOrders();
+        setOrders(list);
+      } catch {
+        // no-op
+      }
+    };
+
+    const channel = supabase
+      .channel('public:orders')
+      .on(
+        'postgres_changes',
+        { event: 'INSERT', schema: 'public', table: 'orders' },
+        (payload) => {
+          refresh();
+          setNewOrdersCount((c) => c + 1);
+          const orderRow = payload.new as any;
+          const order: Order = {
+            id: orderRow.id,
+            customerId: 'guest',
+            customerName: orderRow.customer_name,
+            customerEmail: orderRow.customer_email ?? undefined,
+            customerPhone: orderRow.customer_phone ?? undefined,
+            items: orderRow.items ?? [],
+            total: Number(orderRow.total),
+            status: orderRow.status,
+            notes: orderRow.notes ?? undefined,
+            paymentMethod: orderRow.payment_method ?? undefined,
+            paymentProof: orderRow.payment_proof ?? undefined,
+            createdAt: orderRow.created_at,
+            updatedAt: orderRow.updated_at,
+          } as Order;
+          newOrderCallbacksRef.current.forEach((cb) => {
+            try { cb(order); } catch (e) { console.error('onNewOrder callback failed', e); }
+          });
+        },
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, [currentUser]);
+
   const [searchQuery, setSearchQuery] = useState('');
-  const [products, setProducts] = useState<Product[]>([]);
-  const [subcategories, setSubcategories] = useState<Subcategory[]>([]);
+
+  // Stale-while-revalidate: arrancamos con lo último cacheado en localStorage
+  // para que productos y subcategorías se vean al instante en visitas siguientes.
+  // En paralelo Supabase refresca con la versión más nueva.
+  const PRODUCTS_CACHE_KEY = 'elemental_products_cache_v2';
+  // La v1 podía pesar ~18 MB (imágenes en base64): se borra.
+  try { localStorage.removeItem('elemental_products_cache_v1'); } catch { /* sin almacenamiento */ }
+  const SUBCATS_CACHE_KEY = 'elemental_subcategories_cache_v1';
+
+  const readCache = <T,>(key: string): T[] => {
+    if (typeof window === 'undefined') return [];
+    try {
+      const raw = window.localStorage.getItem(key);
+      if (!raw) return [];
+      const parsed = JSON.parse(raw);
+      return Array.isArray(parsed) ? (parsed as T[]) : [];
+    } catch {
+      return [];
+    }
+  };
+
+  const writeCache = <T,>(key: string, list: T[]) => {
+    if (typeof window === 'undefined') return;
+    try {
+      window.localStorage.setItem(key, JSON.stringify(list));
+    } catch {
+      // localStorage lleno o no disponible — ignoramos, no es crítico.
+    }
+  };
+
+  const [products, setProducts] = useState<Product[]>(() => readCache<Product>(PRODUCTS_CACHE_KEY));
+  const [subcategories, setSubcategories] = useState<Subcategory[]>(() => readCache<Subcategory>(SUBCATS_CACHE_KEY));
+  const [productsLoading, setProductsLoading] = useState<boolean>(true);
 
   const refreshSubcategories = async () => {
     try {
       const list = await subcatsApi.listSubcategories();
       setSubcategories(list);
+      writeCache(SUBCATS_CACHE_KEY, list);
     } catch (err) {
       console.error('Failed to load subcategories:', err);
     }
@@ -282,11 +405,17 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       // Only update state if we got a real response. If the network blips and
       // returns an unexpected empty list while we had products, keep the old
       // ones rather than flashing an empty inventory.
-      setProducts(prev => (list.length === 0 && prev.length > 0 ? prev : list));
+      setProducts(prev => {
+        const next = list.length === 0 && prev.length > 0 ? prev : list;
+        if (next === list) writeCache(PRODUCTS_CACHE_KEY, list);
+        return next;
+      });
     } catch (err) {
       console.error('Failed to load products:', err);
       // Network/RLS error — do NOT clear existing state. Keep stale data
       // visible until the next successful fetch.
+    } finally {
+      setProductsLoading(false);
     }
   };
 
@@ -333,16 +462,42 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   });
 
   useEffect(() => {
-    contentApi.listLocations().then(setLocations).catch(() => {});
-    contentApi.listSocialMedia().then(setSocialMedia).catch(() => {});
-    contentApi.listPaymentInfo().then(setPaymentInfo).catch(() => {});
+    // Críticos para el home (tagline + futuras subscripciones realtime).
     contentApi.getSiteSettings().then(setSiteSettings).catch(() => {});
+
+    // No críticos en primera vista: solo se usan en /locations, /checkout y footer.
+    // Los diferimos para no competir con el fetch de productos en el mount inicial.
+    // requestIdleCallback es ideal; fallback a setTimeout para Safari.
+    const deferred = () => {
+      contentApi.listLocations().then(setLocations).catch(() => {});
+      contentApi.listSocialMedia().then(setSocialMedia).catch(() => {});
+      contentApi.listPaymentInfo().then(setPaymentInfo).catch(() => {});
+    };
+    const ric: ((cb: () => void) => number) | undefined =
+      (window as any).requestIdleCallback?.bind(window);
+    const handle = ric ? ric(deferred) : window.setTimeout(deferred, 1500);
+    return () => {
+      const cic: ((id: number) => void) | undefined =
+        (window as any).cancelIdleCallback?.bind(window);
+      if (ric && cic) cic(handle as number);
+      else window.clearTimeout(handle as number);
+    };
   }, []);
 
-  // Save cart to localStorage whenever it changes
+  // Save cart to localStorage whenever it changes.
+  // Blindado con try/catch: si por cualquier motivo el payload excede la
+  // cuota de localStorage (QuotaExceededError, común en Safari/iPhone con
+  // ~5MB de límite), lo registramos y seguimos — sin esto, la excepción
+  // quedaba sin capturar dentro del efecto y, al no existir un Error
+  // Boundary en la app, React desmontaba TODO el árbol dejando solo el
+  // fondo (pantalla en blanco/gris). El carrito en memoria sigue
+  // funcionando aunque no se persista esa vez.
   useEffect(() => {
-    if (typeof window !== 'undefined') {
+    if (typeof window === 'undefined') return;
+    try {
       localStorage.setItem('elemental_cart', JSON.stringify(cart));
+    } catch (err) {
+      console.error('No se pudo guardar el carrito en localStorage:', err);
     }
   }, [cart]);
 
@@ -366,21 +521,36 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   }, 0);
 
   const addToCart = (item: CartItem) => {
+    // `customizationImages` (vistas frontal/trasera/manga) solo se usa en el
+    // preview interactivo de ProductDetail — nunca en carrito/checkout. En
+    // productos creados antes de migrar a Supabase Storage, este campo puede
+    // traer varias imágenes en base64 embebidas (~1-3MB CADA UNA). Guardar
+    // eso en el carrito y por ende en localStorage revienta la cuota de
+    // Safari en iPhone con solo 3-4 artículos, tirando una excepción sin
+    // capturar que —sin Error Boundary— desmonta toda la app dejando la
+    // pantalla en blanco/gris. Lo quitamos aquí, en el único punto de
+    // entrada al carrito, para blindar cualquier caller presente o futuro.
+    const { customizationImages, ...safeProduct } = item.product;
+    const safeItem: CartItem = { ...item, product: safeProduct as typeof item.product };
+
     setCart(prev => {
       const existingItemIndex = prev.findIndex(
-        i => i.product.id === item.product.id && 
-             i.size === item.size && 
-             i.color === item.color &&
-             i.isCustom === item.isCustom
+        i => i.product.id === safeItem.product.id &&
+             i.size === safeItem.size &&
+             i.color === safeItem.color &&
+             i.isCustom === safeItem.isCustom
       );
 
       if (existingItemIndex > -1) {
         const newCart = [...prev];
-        newCart[existingItemIndex].quantity += item.quantity;
+        newCart[existingItemIndex] = {
+          ...newCart[existingItemIndex],
+          quantity: newCart[existingItemIndex].quantity + safeItem.quantity,
+        };
         return newCart;
       }
 
-      return [...prev, item];
+      return [...prev, safeItem];
     });
   };
 
@@ -433,7 +603,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     email: string,
     password: string,
     name: string,
-    role: 'admin' | 'employee',
+    role: string,
     phone?: string,
   ) => {
     await usersApi.createStaff(email, password, name, role, phone);
@@ -467,23 +637,33 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     await refreshUsers();
   };
 
-  const addOrder = (order: Order) => {
-    // Optimistic local insert so the confirmation screen sees it instantly.
+  const addOrder = async (order: Order) => {
+    // Persistimos primero en Supabase. Si el insert falla, propagamos el
+    // error al caller (Checkout) para que muestre error al cliente y NO
+    // pierda la orden. Antes esto era fire-and-forget y una orden que
+    // fallaba en el backend igual mostraba "pedido realizado" al cliente
+    // — perdiendo la venta silenciosamente.
+    await ordersApi.createOrder(order);
+    // Solo tras confirmar el guardado, insertamos localmente para que la
+    // pantalla de confirmación / admin lo refleje al instante.
     setOrders(prev => [order, ...prev]);
-    // Persist to Supabase. If RLS rejects (shouldn't, insert is public) we log
-    // but don't crash the customer-facing flow.
-    ordersApi.createOrder(order).catch((err) => {
-      console.error('Order insert failed:', err);
-    });
+  };
+
+  const refreshOrders = async () => {
+    try {
+      setOrders(await ordersApi.listOrders());
+    } catch { /* sin sesión de staff */ }
   };
 
   const updateOrderStatus = (orderId: string, status: Order['status']) => {
     setOrders(prev => prev.map(order =>
       order.id === orderId ? { ...order, status, updatedAt: new Date().toISOString() } : order
     ));
-    ordersApi.updateStatus(orderId, status).catch((err) => {
-      console.error('Order status update failed:', err);
-    });
+    ordersApi.updateStatus(orderId, status)
+      .then(refreshOrders) // trae el historial que anota la base
+      .catch((err) => {
+        console.error('Order status update failed:', err);
+      });
   };
 
   const addProduct = async (product: Omit<Product, 'id'>) => {
@@ -562,6 +742,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         cartTotal,
         cartItemCount,
         products,
+        productsLoading,
         addProduct,
         updateProduct,
         deleteProduct,
@@ -577,6 +758,10 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         orders,
         addOrder,
         updateOrderStatus,
+        refreshOrders,
+        newOrdersCount,
+        markOrdersSeen,
+        onNewOrder,
         locations,
         addLocation,
         updateLocation,

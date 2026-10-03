@@ -39,6 +39,17 @@ export default defineConfig({
   build: {
     rollupOptions: {
       input: path.resolve(__dirname, 'index.html'),
+      output: {
+        // Split heavy vendor libs into separate chunks for better caching and
+        // parallel download. Returning a chunk name = Rollup creates the chunk.
+        manualChunks(id) {
+          if (!id.includes('node_modules')) return undefined;
+          if (id.includes('react-dom') || /node_modules[\\/]react[\\/]/.test(id)) return 'vendor-react';
+          if (id.includes('@supabase')) return 'vendor-supabase';
+          if (id.includes('motion')) return 'vendor-motion';
+          if (id.includes('@radix-ui') || id.includes('lucide-react')) return 'vendor-ui';
+        },
+      },
     },
   },
   resolve: {
