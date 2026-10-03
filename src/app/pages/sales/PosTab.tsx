@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { toast } from 'sonner';
 import { useApp } from '../../context';
 import { Btn, Card, Input, Label, Modal, Pills, Select, Textarea, cx } from '../../components/admin/ui';
-import { fetchBinancePayments, loadLinks } from '../../lib/payconf';
+import { fetchProviderPayments, loadLinks } from '../../lib/payconf';
 import { addSalePayment, createSale, fmt, todayVe, PAY_STATES, DOC_TYPES, type DocType, type PayState } from '../../lib/sales';
 import { createCustomer, fetchBcv, MONEY_ACCOUNTS, saveAdminSetting, accountByKey } from '../../lib/adminData';
 import { getSizeUpcharge } from '../../lib/pricing';
@@ -259,7 +259,7 @@ export default function PosTab({ ctx }: { ctx: SalesCtx }) {
     if (!(t > 0)) return setBnMsg({ text: 'Agrega productos primero.', color: '#6b7280' });
     setBnMsg({ text: 'Consultando Binance…', color: '#6b7280' });
     try {
-      const [r, links] = await Promise.all([fetchBinancePayments(1), loadLinks('binance')]);
+      const [r, links] = await Promise.all([fetchProviderPayments('binance', 1), loadLinks('binance')]);
       if (!r.connected) return setBnMsg({ text: '⚠️ Binance todavía no está conectado (falta la clave de solo lectura).', color: '#dc2626' });
       const taken = new Set(links.map((l) => l.ref));
       const recent = r.payments.filter((p) => p.time >= Date.now() - 6 * 3600e3 && Math.abs(p.amount - t) < 0.01);

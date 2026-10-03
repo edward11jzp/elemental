@@ -3,12 +3,12 @@ import { toast } from 'sonner';
 import { useApp } from '../context';
 import { Btn, Card, Input, Select, cx } from '../components/admin/ui';
 import { listSales, veDay, todayVe, addDays, type Sale } from '../lib/sales';
-import { candidatesFrom, fetchBinancePayments, loadLinks, markPayment, matchPayments, type IncomingPayment, type PayLink } from '../lib/payconf';
+import { candidatesFrom, fetchProviderPayments, loadLinks, markPayment, matchPayments, type IncomingPayment, type PayLink } from '../lib/payconf';
 
 const PROVIDERS = [
   { key: 'binance', name: 'Binance Pay', icon: '🟡', method: 'binance', live: true, hint: '' },
   { key: 'pago_movil', name: 'Pago Móvil', icon: '📱', method: 'pago_movil', live: false, hint: 'Pago móvil y transferencias en Bs. Se conectará leyendo las notificaciones del banco o con una pasarela de pago.' },
-  { key: 'zelle', name: 'Zelle', icon: '🇺🇸', method: 'zelle', live: false, hint: 'Se conectará leyendo los avisos de Zelle que llegan al correo de Elemental.' },
+  { key: 'zelle', name: 'Zelle', icon: '🇺🇸', method: 'zelle', live: true, hint: '' },
 ];
 
 export default function AdminPayConf() {
@@ -18,7 +18,7 @@ export default function AdminPayConf() {
   const [q, setQ] = useState('');
   const [showIgnored, setShowIgnored] = useState(false);
   const [payments, setPayments] = useState<IncomingPayment[]>([]);
-  const [connected, setConnected] = useState<boolean | null>(null);
+  const [conn, setConn] = useState<Record<string, boolean>>({});
   const [checkedAt, setCheckedAt] = useState<number | null>(null);
   const [links, setLinks] = useState<PayLink[]>([]);
   const [sales, setSales] = useState<Sale[]>([]);
@@ -28,8 +28,8 @@ export default function AdminPayConf() {
   const load = useCallback(async () => {
     if (!p.live) return;
     try {
-      const [r, l, s] = await Promise.all([fetchBinancePayments(days), loadLinks(prov), listSales(addDays(todayVe(), -(days + 1)))]);
-      setConnected(r.connected); setPayments(r.payments); setCheckedAt(r.checkedAt ?? Date.now()); setLinks(l); setSales(s); setError(null);
+      const [r, l, s] = await Promise.all([fetchProviderPayments(prov, days), loadLinks(prov), listSales(addDays(todayVe(), -(days + 1)))]);
+      setConn((c) => ({ ...c, [prov]: r.connected })); setPayments(r.payments); setCheckedAt(r.checkedAt ?? Date.now()); setLinks(l); setSales(s); setError(null);
     } catch (e: any) {
       setError(e?.message ?? 'No se pudo consultar');
     }
@@ -77,17 +77,21 @@ export default function AdminPayConf() {
       <div className="flex gap-1 overflow-x-auto border-b border-[#ececef]">
         {PROVIDERS.map((x) => (
           <button key={x.key} type="button" onClick={() => setProv(x.key)} className={cx('whitespace-nowrap px-4 py-2.5 text-[13px] font-semibold border-b-2 -mb-px', x.key === prov ? 'border-[#111]' : 'border-transparent text-[#6b7280]')}>
-            {x.icon} {x.name} {x.live && connected ? <span className="text-[#16a34a]">●</span> : <span className="text-[10px] font-normal">(por conectar)</span>}
+            {x.icon} {x.name} {x.live && conn[x.key] ? <span className="text-[#16a34a]">●</span> : <span className="text-[10px] font-normal">(por conectar)</span>}
           </button>
         ))}
       </div>
 
-      {!p.live || connected === false ? (
+      {!p.live || conn[prov] === false ? (
         <Card className="p-8 text-center">
           <div className="text-4xl mb-3">{p.icon}</div>
           <div className="font-semibold mb-1">{p.name} todavía no está conectado</div>
           <div className="text-[13px] text-[#6b7280] max-w-md mx-auto">
-            {p.live ? 'Falta la clave de SOLO LECTURA de Binance de Elemental (BINANCE_API_KEY y BINANCE_API_SECRET en Vercel).' : p.hint}
+            {p.key === 'binance'
+              ? 'Falta la clave de SOLO LECTURA de Binance de Elemental (BINANCE_API_KEY y BINANCE_API_SECRET en Vercel).'
+              : p.key === 'zelle'
+                ? 'Falta la contraseña de aplicación del correo de Elemental (GMAIL_USER y GMAIL_APP_PASSWORD en Vercel) y el filtro que reenvía allí los avisos de Chase.'
+                : p.hint}
           </div>
           <div className="text-[12px] text-[#9ca3af] mt-3">Mientras tanto, confirma estos pagos revisando la app.</div>
         </Card>
@@ -101,7 +105,7 @@ export default function AdminPayConf() {
             <Btn variant="ghost" onClick={load}>↻ Actualizar</Btn>
           </Card>
           {error && <Card className="p-4 text-[13px] text-[#dc2626]">⚠️ {error}</Card>}
-          {connected && (
+          {conn[prov] && (
             <p className="text-[12px] text-[#6b7280]">
               <b>{tienda.length}</b> de la tienda ({sum(tienda)} {cur}) · <b>{pend.length}</b> por revisar ({sum(pend)} {cur}) · {ajenos.length} ajenos
               {ajenos.length > 0 && <label className="ml-2 cursor-pointer"><input type="checkbox" checked={showIgnored} onChange={(e) => setShowIgnored(e.target.checked)} /> mostrar ajenos</label>}
@@ -144,7 +148,7 @@ export default function AdminPayConf() {
                 </div>
               </Card>
             ))}
-            {connected && !list.length && <Card className="p-6 text-center text-[13px] text-[#9ca3af]">{q ? `Ningún cobro coincide con «${q}».` : 'Sin cobros en este período.'}</Card>}
+            {conn[prov] && !list.length && <Card className="p-6 text-center text-[13px] text-[#9ca3af]">{q ? `Ningún cobro coincide con «${q}».` : 'Sin cobros en este período.'}</Card>}
           </div>
           {orphans.length > 0 && (
             <Card className="p-4 text-[13px]">

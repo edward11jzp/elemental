@@ -28,11 +28,11 @@ export interface Candidate {
   method: string;
 }
 
-export async function fetchBinancePayments(days: number): Promise<{ connected: boolean; payments: IncomingPayment[]; checkedAt?: number }> {
+export async function fetchProviderPayments(provider: string, days: number): Promise<{ connected: boolean; payments: IncomingPayment[]; checkedAt?: number }> {
   const { data } = await supabase.auth.getSession();
-  const r = await fetch(`/api/binance-payments?days=${days}`, { headers: { Authorization: `Bearer ${data.session?.access_token ?? ''}` } });
+  const r = await fetch(`/api/${provider}-payments?days=${days}`, { headers: { Authorization: `Bearer ${data.session?.access_token ?? ''}` } });
   const body = await r.json().catch(() => ({}));
-  if (!r.ok) throw new Error(body.error || 'No se pudo consultar Binance');
+  if (!r.ok) throw new Error(body.error || 'No se pudo consultar los cobros');
   return body;
 }
 
