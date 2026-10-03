@@ -390,7 +390,11 @@ export default function PosTab({ ctx }: { ctx: SalesCtx }) {
               const out = p.stock <= 0;
               return (
                 <Card key={p.id} className={cx('p-3 transition-colors', out ? 'opacity-40' : 'cursor-pointer hover:border-[#a1a1aa]')} onClick={() => !out && addProduct(p)}>
-                  <img src={p.image} alt={p.name} className="w-full aspect-square rounded-lg object-cover bg-[#f1f1f3]" loading="lazy" />
+                  {p.image ? (
+                    <img src={p.image} alt={p.name} className="w-full aspect-square rounded-lg object-cover bg-[#f1f1f3]" loading="lazy" />
+                  ) : (
+                    <div className="w-full aspect-square rounded-lg bg-[#f1f1f3] flex items-center justify-center text-3xl">{p.emoji || '📦'}</div>
+                  )}
                   <div className="text-[13px] font-medium mt-2 leading-tight line-clamp-2">{p.name}</div>
                   <div className="text-[11px] text-[#6b7280]">{SUBCAT_LABEL[p.subcategory] ?? p.subcategory} · stock {left}</div>
                   <div className="font-semibold mt-1 text-[14px]">

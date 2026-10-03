@@ -9,6 +9,7 @@ export interface Product {
   wholesalePrice?: number; // Precio al por mayor (6+ productos)
   image: string;
   images: string[];
+  emoji?: string; // Ícono que se usa como miniatura cuando no hay foto
   description: string;
   sizes: string[];
   colors: string[];

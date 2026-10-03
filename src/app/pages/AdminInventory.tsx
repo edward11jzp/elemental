@@ -61,6 +61,7 @@ export default function AdminInventory() {
     stock: '',
     description: '',
     image: '',
+    emoji: '',
     allowCustom: false,
     colorPalette: [] as string[],
     sizes: [] as string[],
@@ -132,6 +133,7 @@ export default function AdminInventory() {
       wholesalePrice: parseFloat(newProduct.wholesalePrice),
       image: validImages[0] || newProduct.image,
       images: validImages.length > 0 ? validImages : [newProduct.image],
+      emoji: newProduct.emoji.trim(),
       description: newProduct.description,
       sizes: newProduct.sizes.length > 0 ? newProduct.sizes : ['S', 'M', 'L', 'XL', '2XL'],
       colors: [],
@@ -434,6 +436,7 @@ export default function AdminInventory() {
           : ['S', 'M', 'L', 'XL', '2XL'],
         customizationImages: editingProduct.customizationImages,
         minStock: Math.max(0, parseInt(String(editingProduct.minStock ?? 50)) || 0),
+        emoji: String(editingProduct.emoji ?? '').trim(),
         location: String(editingProduct.location ?? '').trim(),
         supplier: String(editingProduct.supplier ?? ''),
       });
@@ -639,11 +642,13 @@ export default function AdminInventory() {
                   <tr key={product.id} className="border-b border-border">
                     <td className="p-4">
                       <div className="flex items-center gap-4">
-                        <img
-                          src={product.image}
-                          alt={product.name}
-                          className="w-12 h-12 object-cover rounded"
-                        />
+                        {product.image ? (
+                          <img src={product.image} alt={product.name} className="w-12 h-12 object-cover rounded" />
+                        ) : (
+                          <div className="w-12 h-12 shrink-0 rounded bg-secondary flex items-center justify-center text-2xl">
+                            {product.emoji || '📦'}
+                          </div>
+                        )}
                         <div className="min-w-[160px]">
                           <p>{product.name}</p>
                           <p className="text-sm text-muted-foreground">{product.subcategory}</p>
@@ -772,6 +777,19 @@ export default function AdminInventory() {
                     className="bg-secondary border-border text-white"
                     placeholder="Ingresa el nombre del producto"
                   />
+                </div>
+
+                <div>
+                  <Label htmlFor="add-emoji">Emoji (opcional)</Label>
+                  <Input
+                    id="add-emoji"
+                    maxLength={4}
+                    value={newProduct.emoji}
+                    onChange={(e) => setNewProduct({ ...newProduct, emoji: e.target.value })}
+                    className="bg-secondary border-border text-white"
+                    placeholder="👕 🧢 ☕ ⭐"
+                  />
+                  <p className="text-xs text-muted-foreground mt-1">Se usa como miniatura mientras el producto no tenga foto.</p>
                 </div>
 
                 <div>
@@ -1295,6 +1313,19 @@ export default function AdminInventory() {
                     Privado. Se usa para ganancia y márgenes en Ventas.
                   </p>
                 </div>}
+
+                <div>
+                  <Label htmlFor="edit-emoji">Emoji (opcional)</Label>
+                  <Input
+                    id="edit-emoji"
+                    maxLength={4}
+                    value={editingProduct?.emoji ?? ''}
+                    onChange={(e) => setEditingProduct({ ...editingProduct, emoji: e.target.value })}
+                    className="bg-secondary border-border text-white"
+                    placeholder="👕 🧢 ☕ ⭐"
+                  />
+                  <p className="text-xs text-muted-foreground mt-1">Se usa como miniatura mientras el producto no tenga foto.</p>
+                </div>
 
                 <div>
                   <Label htmlFor="edit-supplier">Proveedor</Label>
