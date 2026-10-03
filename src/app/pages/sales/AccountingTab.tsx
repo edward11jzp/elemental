@@ -3,7 +3,8 @@ import { toast } from 'sonner';
 import { Cell, Legend, Pie, PieChart, ResponsiveContainer, Tooltip } from 'recharts';
 import { Card, Chip, Input, Label, Pills, Select, Stat, Table } from '../../components/admin/ui';
 import { fmt, payState, PAY_STATES, saleCost, saleDateLabel, setSalePay, todayVe, veDay, type PayState } from '../../lib/sales';
-import { expenseTotals, listExpenses, type Expense } from '../../lib/adminData';
+import { expenseTotals, listExpenses, saveAdminSetting, type Company, type Expense } from '../../lib/adminData';
+import { Btn } from '../../components/admin/ui';
 import type { SalesCtx } from '../AdminSales';
 
 type Sub = 'summary' | 'income' | 'ledger' | 'receivable' | 'taxes';
@@ -255,6 +256,7 @@ export default function AccountingTab({ ctx }: { ctx: SalesCtx }) {
 
       {sub === 'taxes' && (
         <>
+          <CompanyCard company={ctx.settings.company} />
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
             <Stat label="Base imponible" value={fmt(totalSubtotal - totalDiscount)} />
             <Stat label="IVA recaudado" value={fmt(totalTax)} color={yellow} />
@@ -293,5 +295,37 @@ function Row({ k, v, strong, color }: { k: ReactNode; v: ReactNode; strong?: boo
       <span style={!strong ? { color } : undefined}>{k}</span>
       <span style={{ color }}>{v}</span>
     </div>
+  );
+}
+
+// Datos que salen impresos en facturas, notas de entrega y recibos.
+function CompanyCard({ company }: { company: Company }) {
+  const [f, setF] = useState<Company>(company);
+  const [busy, setBusy] = useState(false);
+  const set = (patch: Partial<Company>) => setF((x) => ({ ...x, ...patch }));
+  const save = async () => {
+    setBusy(true);
+    try {
+      await saveAdminSetting('company', { ...f, rif: f.rif.trim().toUpperCase() });
+      toast.success('Datos guardados ✓ · aparecerán en los documentos que imprimas');
+    } catch (e: any) {
+      toast.error(e.message);
+    } finally {
+      setBusy(false);
+    }
+  };
+  return (
+    <Card className="p-4">
+      <h3 className="text-[14px] font-semibold">Datos de la empresa</h3>
+      <p className="text-[12px] text-[#6b7280] mb-3">Se imprimen en la cabecera de facturas, notas de entrega y recibos.</p>
+      <div className="grid sm:grid-cols-2 gap-3">
+        <div><Label>Nombre</Label><Input value={f.name} onChange={(e) => set({ name: e.target.value })} /></div>
+        <div><Label>RIF</Label><Input value={f.rif} onChange={(e) => set({ rif: e.target.value })} placeholder="J-50404118-1" /></div>
+        <div><Label>Teléfono</Label><Input value={f.phone} onChange={(e) => set({ phone: e.target.value })} /></div>
+        <div><Label>Correo</Label><Input type="email" value={f.email} onChange={(e) => set({ email: e.target.value })} /></div>
+        <div className="sm:col-span-2"><Label>Dirección fiscal</Label><Input value={f.address} onChange={(e) => set({ address: e.target.value })} /></div>
+      </div>
+      <div className="mt-3 flex justify-end"><Btn disabled={busy} onClick={save}>{busy ? 'Guardando…' : 'Guardar'}</Btn></div>
+    </Card>
   );
 }
