@@ -115,7 +115,9 @@ export default function PosTab({ ctx }: { ctx: SalesCtx }) {
     return delTipo.filter(
       (p) =>
         (!cat || p.subcategory === cat) &&
-        (!s || p.name.toLowerCase().includes(s) || p.id.toLowerCase().includes(s) || (SUBCAT_LABEL[p.subcategory] ?? p.subcategory).toLowerCase().includes(s)),
+        (!s || p.name.toLowerCase().includes(s) || p.id.toLowerCase().includes(s)
+          || [p.sku ?? '', ...Object.values(p.skuSizes ?? {})].join(' ').toLowerCase().includes(s)
+          || (SUBCAT_LABEL[p.subcategory] ?? p.subcategory).toLowerCase().includes(s)),
     );
   }, [delTipo, q, cat]);
 
@@ -445,7 +447,7 @@ export default function PosTab({ ctx }: { ctx: SalesCtx }) {
                     <div className="w-full aspect-square rounded-lg bg-[#f1f1f3] flex items-center justify-center text-3xl">{p.emoji || '📦'}</div>
                   )}
                   <div className="text-[13px] font-medium mt-2 leading-tight line-clamp-2">{p.name}</div>
-                  <div className="text-[11px] text-[#6b7280]">{SUBCAT_LABEL[p.subcategory] ?? p.subcategory} · stock {left}</div>
+                  <div className="text-[11px] text-[#6b7280]">{p.sku ? <span className="font-mono">{p.sku}</span> : SUBCAT_LABEL[p.subcategory] ?? p.subcategory} · stock {left}</div>
                   <div className="font-semibold mt-1 text-[14px]">
                     {fmt(basePrice(p, mode))}
                     {mode === 'mayor' && <span className="ml-1 text-[10px] font-normal text-[#9333ea]">mayor</span>}

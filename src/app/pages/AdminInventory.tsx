@@ -112,7 +112,9 @@ export default function AdminInventory() {
   const cuentaWeb = products.filter(esWeb).length;
   const cuentaFact = products.length - cuentaWeb;
   const filteredProducts = products.filter(product => {
-    const matchesSearch = product.name.toLowerCase().includes(searchTerm.toLowerCase());
+    const q = searchTerm.toLowerCase().trim();
+    const codigos = [product.sku ?? '', ...Object.values(product.skuSizes ?? {})].join(' ').toLowerCase();
+    const matchesSearch = !q || product.name.toLowerCase().includes(q) || codigos.includes(q);
     const matchesCategory = categoryFilter === 'all' || product.category === categoryFilter;
     const matchesTipo = tipo === 'todos' || (tipo === 'web' ? esWeb(product) : !esWeb(product));
     return matchesSearch && matchesCategory && matchesTipo && (!lowOnly || isLow(product));
@@ -700,7 +702,10 @@ export default function AdminInventory() {
                               </span>
                             )}
                           </p>
-                          <p className="text-sm text-muted-foreground">{product.subcategory}</p>
+                          <p className="text-sm text-muted-foreground">
+                            {product.sku ? <span className="font-mono">{product.sku}</span> : null}
+                            {product.sku ? ' · ' : ''}{product.subcategory}
+                          </p>
                         </div>
                       </div>
                     </td>
