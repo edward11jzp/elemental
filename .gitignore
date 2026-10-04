@@ -34,3 +34,4 @@ pnpm-debug.log*
 .cache
 .vercel
 .image-backups/
+supabase/admin_phase7_payment_inbox.sql
