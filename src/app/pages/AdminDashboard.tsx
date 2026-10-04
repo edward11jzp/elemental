@@ -16,6 +16,9 @@ import {
 import type { Order, OrderStatus } from '../types';
 import { getRetailUnitPrice } from '../lib/pricing';
 import { SelfReviewPanel } from '../lib/selfReview';
+import { useSedes } from '../lib/sedes';
+import { loadStock, qtyAt, stockIndex, type StockRow } from '../lib/stock';
+import { isValidSale, listSales, type Sale } from '../lib/sales';
 
 type Range = 'today' | 'week' | 'month' | 'year';
 
@@ -67,14 +70,16 @@ function rangeWindow(range: Range, now: Date) {
 }
 
 // Serie para el gráfico: por hora (hoy), por día (semana/mes) o por mes (año).
-function buildSeries(range: Range, orders: Order[], now: Date) {
+interface Movimiento { fecha: string; total: number }
+
+function buildSeries(range: Range, movs: Movimiento[], now: Date) {
   const sum = (from: number, to: number) =>
-    orders
-      .filter((o) => {
-        const t = new Date(o.createdAt).getTime();
+    movs
+      .filter((m) => {
+        const t = new Date(m.fecha).getTime();
         return t >= from && t < to;
       })
-      .reduce((s, o) => s + o.total, 0);
+      .reduce((s, m) => s + m.total, 0);
 
   if (range === 'today') {
     const base = new Date(now);
@@ -160,6 +165,14 @@ export default function AdminDashboard() {
   const { currentUser, orders, products } = useApp();
   const navigate = useNavigate();
   const [range, setRange] = useState<Range>('week');
+  // El tablero sigue al selector de sede y al rango elegido.
+  const { sede, nameOf } = useSedes();
+  const [ventas, setVentas] = useState<Sale[]>([]);
+  const [stock, setStock] = useState<StockRow[]>([]);
+  useEffect(() => {
+    listSales().then(setVentas).catch(() => setVentas([]));
+    loadStock().then(setStock).catch(() => setStock([]));
+  }, []);
 
   useEffect(() => {
     if (!currentUser) {
@@ -167,18 +180,34 @@ export default function AdminDashboard() {
     }
   }, [currentUser, navigate]);
 
+  const sIdx = useMemo(() => stockIndex(stock), [stock]);
+
+  // Existencias del producto en la sede elegida; sin sede, el total.
+  const unidades = useMemo(() => (id: string) => qtyAt(sIdx, id, sede), [sIdx, sede]);
+
   const stats = useMemo(() => {
     const now = new Date();
     const paid = orders.filter((o) => REVENUE_STATUSES.includes(o.status));
+    // Ventas del mostrador de la sede que se está viendo.
+    const pos = ventas.filter((v) => isValidSale(v) && (!sede || v.locationId === sede));
+    const movs: Movimiento[] = [
+      // Los pedidos web sólo cuentan cuando se miran todas las sedes.
+      ...(sede ? [] : paid.map((o) => ({ fecha: o.createdAt, total: o.total }))),
+      ...pos.map((v) => ({ fecha: v.date, total: v.total })),
+    ];
+    const enRango = (iso: string, from: number, to: number) => {
+      const t = new Date(iso).getTime();
+      return t >= from && t <= to;
+    };
     const { start, end, length } = rangeWindow(range, now);
     const inWindow = (o: Order, from: number, to: number) => {
       const t = new Date(o.createdAt).getTime();
       return t >= from && t <= to;
     };
-    const current = paid.filter((o) => inWindow(o, start, end));
-    const previous = paid.filter((o) => inWindow(o, start - length, start - 1));
-    const revenue = current.reduce((s, o) => s + o.total, 0);
-    const prevRevenue = previous.reduce((s, o) => s + o.total, 0);
+    const current = movs.filter((m) => enRango(m.fecha, start, end));
+    const previous = movs.filter((m) => enRango(m.fecha, start - length, start - 1));
+    const revenue = current.reduce((s, m) => s + m.total, 0);
+    const prevRevenue = previous.reduce((s, m) => s + m.total, 0);
     const delta = prevRevenue > 0 ? ((revenue - prevRevenue) / prevRevenue) * 100 : null;
     const rangeOrders = orders.filter((o) => inWindow(o, start, end));
 
@@ -196,6 +225,16 @@ export default function AdminDashboard() {
         sold.set(key, prev);
       }),
     );
+    pos.forEach((v) =>
+      v.items.forEach((it) => {
+        const key = it.id ?? it.name;
+        const p = products.find((x) => x.id === it.id);
+        const prev = sold.get(key) ?? { name: it.name, image: p?.image ?? '', units: 0, revenue: 0 };
+        prev.units += it.qty;
+        prev.revenue += it.qty * it.price;
+        sold.set(key, prev);
+      }),
+    );
     const topProducts = [...sold.values()].sort((a, b) => b.units - a.units).slice(0, 5);
 
     return {
@@ -209,21 +248,23 @@ export default function AdminDashboard() {
       totalSales: paid.reduce((s, o) => s + o.total, 0),
       totalOrders: orders.length,
       avgTicket: current.length ? revenue / current.length : 0,
+      ventasMostrador: pos.filter((v) => enRango(v.date, start, end)).length,
       unitsSold: paid.reduce((s, o) => s + o.items.reduce((a, i) => a + i.quantity, 0), 0),
-      stockUnits: products.reduce((s, p) => s + (p.stock ?? 0), 0),
-      stockValue: products.reduce((s, p) => s + (p.stock ?? 0) * getRetailUnitPrice(p), 0),
-      outOfStock: products.filter((p) => (p.stock ?? 0) <= 0).length,
-      lowStock: products.filter((p) => p.stock > 0 && p.stock < LOW_STOCK).length,
-      series: buildSeries(range, paid, now),
+      stockUnits: products.reduce((s, p) => s + unidades(p.id), 0),
+      stockValue: products.reduce((s, p) => s + unidades(p.id) * getRetailUnitPrice(p), 0),
+      outOfStock: products.filter((p) => unidades(p.id) <= 0).length,
+      lowStock: products.filter((p) => unidades(p.id) > 0 && unidades(p.id) < LOW_STOCK).length,
+      series: buildSeries(range, movs, now),
       byStatus,
       topProducts,
     };
-  }, [orders, products, range]);
+  }, [orders, products, range, ventas, sede, sIdx]);
 
   if (!currentUser) return null; // el acceso por módulo lo controla AdminRoot
 
   const pieData = stats.byStatus.filter((s) => s.value > 0);
   const lowStockList = products
+    .map((p) => ({ ...p, stock: unidades(p.id) }))
     .filter((p) => p.stock < LOW_STOCK)
     .sort((a, b) => a.stock - b.stock)
     .slice(0, 6);
@@ -234,6 +275,10 @@ export default function AdminDashboard() {
   return (
     <div className="px-4 lg:px-6 py-5 space-y-4 max-w-[1600px]">
       <SelfReviewPanel />
+      <p className="text-[12px] text-[#6b7280]">
+        {sede ? <>Mostrando <b>{nameOf(sede)}</b> · ventas del mostrador y existencias de esa sede.</>
+              : <>Mostrando <b>todas las sedes</b> · ventas del mostrador, pedidos de la web y existencias de todas.</>}
+      </p>
       {/* Selector de rango */}
       <div className="inline-flex rounded-lg border border-[#e6e6e9] bg-[#f1f1f3] p-1">
         {RANGES.map((r) => (
