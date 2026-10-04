@@ -8,6 +8,8 @@ import { supabase } from '../../lib/supabase';
 import { uploadImageKeepAlpha } from '../../lib/storage';
 import type { Product } from '../../types';
 import { Btn, Card, Input, Label, Modal, Select, cx } from './ui';
+import { useSedes } from '../../lib/sedes';
+import { registerMovement, seedStockInto, transferStock, type StockRow } from '../../lib/stock';
 
 export interface Movement {
   id: number;
@@ -56,9 +58,12 @@ export function MovementModal({ open, onClose, products, productId, onSaved }: {
   const [qty, setQty] = useState('1');
   const [reason, setReason] = useState('Compra');
   const [busy, setBusy] = useState(false);
+  const { sedes, sede, mySede } = useSedes();
+  const [loc, setLoc] = useState('');
   useEffect(() => {
     if (open) {
       setType('in'); setPid(productId ?? products[0]?.id ?? ''); setQty('1'); setReason('Compra');
+      setLoc(sede || mySede || sedes[0]?.id || '');
     }
   }, [open, productId, products]);
   useEffect(() => setReason(REASONS[type][0]), [type]);
@@ -66,13 +71,18 @@ export function MovementModal({ open, onClose, products, productId, onSaved }: {
   const save = async () => {
     const n = Math.floor(Number(qty));
     if (!pid || !(n > 0)) return toast.error('Indica producto y cantidad');
+    if (!loc) return toast.error('Indica la sede');
     setBusy(true);
-    const { data, error } = await supabase.rpc('register_movement', { p_product: pid, p_type: type, p_qty: n, p_reason: reason });
-    setBusy(false);
-    if (error) return toast.error(error.message);
-    toast.success(`Movimiento registrado · stock ahora ${data}`);
-    onSaved();
-    onClose();
+    try {
+      const q = await registerMovement(pid, type, n, reason, loc);
+      toast.success(`Movimiento registrado · quedan ${q} en esa sede`);
+      onSaved();
+      onClose();
+    } catch (e: any) {
+      toast.error(e.message);
+    } finally {
+      setBusy(false);
+    }
   };
 
   return (
@@ -94,6 +104,13 @@ export function MovementModal({ open, onClose, products, productId, onSaved }: {
           <Label>Producto</Label>
           <Select value={pid} onChange={(e) => setPid(e.target.value)}>
             {products.map((p) => <option key={p.id} value={p.id}>{p.name} (stock {p.stock})</option>)}
+          </Select>
+        </div>
+        <div>
+          <Label>Sede</Label>
+          <Select value={loc} onChange={(e) => setLoc(e.target.value)}>
+            <option value="">— Elige la sede —</option>
+            {sedes.filter((x) => x.active).map((x) => <option key={x.id} value={x.id}>{x.code}</option>)}
           </Select>
         </div>
         <div className="grid grid-cols-2 gap-2">
@@ -234,6 +251,109 @@ export function HeavyImagesBanner() {
       </div>
       {failed && <div className="w-full text-[12px] text-[#b91c1c]">⚠️ {failed}</div>}
       <Btn disabled={!!progress} onClick={() => { run().catch((e) => { console.error(e); setFailed(String(e?.message ?? e)); setProgress(null); }); }}>{progress ? 'Optimizando…' : 'Optimizar imágenes'}</Btn>
+    </div>
+  );
+}
+
+/** Mover existencias de una sede a otra. */
+export function TransferModal({ open, onClose, products, productId, onSaved }: { open: boolean; onClose: () => void; products: Product[]; productId?: string | null; onSaved: () => void }) {
+  const { sedes, sede, mySede } = useSedes();
+  const [pid, setPid] = useState('');
+  const [from, setFrom] = useState('');
+  const [to, setTo] = useState('');
+  const [qty, setQty] = useState('1');
+  const [reason, setReason] = useState('Traslado entre sedes');
+  const [busy, setBusy] = useState(false);
+  useEffect(() => {
+    if (!open) return;
+    setPid(productId ?? products[0]?.id ?? '');
+    setFrom(sede || mySede || sedes[0]?.id || '');
+    setTo('');
+    setQty('1');
+  }, [open, productId, products, sede, mySede, sedes]);
+
+  const save = async () => {
+    const n = Math.floor(Number(qty));
+    if (!pid || !(n > 0)) return toast.error('Indica producto y cantidad');
+    if (!from || !to || from === to) return toast.error('Elige dos sedes distintas');
+    setBusy(true);
+    try {
+      await transferStock(pid, from, to, n, reason);
+      toast.success('Traslado registrado ✓');
+      onSaved();
+      onClose();
+    } catch (e: any) {
+      toast.error(e.message);
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  return (
+    <Modal open={open} onClose={onClose} title="Trasladar entre sedes">
+      <div className="space-y-3">
+        <div>
+          <Label>Producto</Label>
+          <Select value={pid} onChange={(e) => setPid(e.target.value)}>
+            {products.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
+          </Select>
+        </div>
+        <div className="grid grid-cols-2 gap-2">
+          <div>
+            <Label>Sale de</Label>
+            <Select value={from} onChange={(e) => setFrom(e.target.value)}>
+              {sedes.filter((x) => x.active).map((x) => <option key={x.id} value={x.id}>{x.code}</option>)}
+            </Select>
+          </div>
+          <div>
+            <Label>Entra en</Label>
+            <Select value={to} onChange={(e) => setTo(e.target.value)}>
+              <option value="">— Elige la sede —</option>
+              {sedes.filter((x) => x.active && x.id !== from).map((x) => <option key={x.id} value={x.id}>{x.code}</option>)}
+            </Select>
+          </div>
+        </div>
+        <div className="grid grid-cols-2 gap-2">
+          <div><Label>Cantidad</Label><Input type="number" min={1} value={qty} onChange={(e) => setQty(e.target.value)} /></div>
+          <div><Label>Motivo</Label><Input value={reason} onChange={(e) => setReason(e.target.value)} /></div>
+        </div>
+        <div className="flex justify-end gap-2 pt-1"><Btn variant="ghost" onClick={onClose}>Cancelar</Btn><Btn disabled={busy} onClick={save}>{busy ? 'Trasladando…' : 'Trasladar'}</Btn></div>
+      </div>
+    </Modal>
+  );
+}
+
+/** Primera vez: carga todo el inventario actual en una sede, para repartirlo desde ahí. */
+export function SeedStockBanner({ stock, onSaved }: { stock: StockRow[]; onSaved: () => void }) {
+  const { sedes } = useSedes();
+  const [loc, setLoc] = useState('');
+  const [busy, setBusy] = useState(false);
+  if (stock.length || !sedes.length) return null;
+  const run = async () => {
+    if (!loc) return toast.error('Elige la sede donde está hoy el inventario');
+    setBusy(true);
+    try {
+      const n = await seedStockInto(loc);
+      toast.success(`${n} producto(s) cargados en esa sede. Ahora repártelos con traslados.`);
+      onSaved();
+    } catch (e: any) {
+      toast.error(e.message);
+    } finally {
+      setBusy(false);
+    }
+  };
+  return (
+    <div className="mb-4 flex flex-wrap items-center gap-3 rounded-xl border border-[#fde68a] bg-[#fffbeb] px-4 py-3 text-[13px] text-[#78350f]">
+      <span className="text-lg">🏢</span>
+      <div className="flex-1 min-w-[240px]">
+        <b>El inventario todavía no está repartido por sede.</b>
+        <span className="block text-[11px]">Elige dónde está hoy la mercancía; después la repartes con traslados. Mientras tanto no se pueden registrar ventas.</span>
+      </div>
+      <Select value={loc} onChange={(e) => setLoc(e.target.value)} className="!w-auto">
+        <option value="">— Sede —</option>
+        {sedes.filter((x) => x.active).map((x) => <option key={x.id} value={x.id}>{x.code}</option>)}
+      </Select>
+      <Btn disabled={busy} onClick={run}>{busy ? 'Cargando…' : 'Cargar aquí'}</Btn>
     </div>
   );
 }

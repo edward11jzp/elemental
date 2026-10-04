@@ -5,6 +5,8 @@ import { supabase } from '../lib/supabase';
 import { Btn, Card, Input, Label, Modal, Select, cx } from '../components/admin/ui';
 import { LOCKED, MODULES, ROLES, ROLE_LABEL, isStaffRole, sanitize, savePermissions, usePerms, type Matrix } from '../lib/perms';
 import type { User } from '../types';
+import { useSedes } from '../lib/sedes';
+import { supabase } from '../lib/supabase';
 
 const GRADIENTS = ['from-[#a855f7] to-[#ef4444]', 'from-[#ef4444] to-[#22c55e]', 'from-[#06b6d4] to-[#3b82f6]', 'from-[#f59e0b] to-[#f97316]', 'from-[#22c55e] to-[#14b8a6]'];
 const initials = (n: string) => n.split(/\s+/).map((x) => x[0]).join('').slice(0, 2).toUpperCase();
@@ -160,10 +162,19 @@ function EditUserModal({ user, self, onClose }: { user: User; self: boolean; onC
   const [name, setName] = useState(user.name);
   const [role, setRole] = useState(user.role === 'employee' ? 'sales' : user.role);
   const [active, setActive] = useState(user.active);
+  const { sedes } = useSedes();
+  const [loc, setLoc] = useState<string>('');
+  // La sede vive en el perfil; sus ventas y movimientos se registran ahí.
+  useEffect(() => {
+    supabase.from('profiles').select('location_id').eq('id', user.id).maybeSingle()
+      .then(({ data }) => setLoc((data as any)?.location_id ?? ''));
+  }, [user.id]);
   const save = async () => {
     if (!name.trim()) return toast.error('El nombre es obligatorio');
     try {
       await updateUser(user.id, { name: name.trim(), role: role as User['role'], ...(active !== user.active ? { active } : {}) });
+      const { error } = await supabase.from('profiles').update({ location_id: loc || null }).eq('id', user.id);
+      if (error) throw new Error(error.message);
       toast.success('Usuario actualizado ✓');
       onClose();
     } catch (e: any) {
@@ -185,6 +196,16 @@ function EditUserModal({ user, self, onClose }: { user: User; self: boolean; onC
             {ROLES.map((r) => <option key={r} value={r}>{ROLE_LABEL[r]}</option>)}
           </Select>
         </div>
+        {sedes.length > 0 && (
+          <div>
+            <Label>Sede</Label>
+            <Select value={loc} onChange={(e) => setLoc(e.target.value)}>
+              <option value="">— Sin sede —</option>
+              {sedes.filter((x) => x.active).map((x) => <option key={x.id} value={x.id}>{x.code}</option>)}
+            </Select>
+            <p className="text-[11px] text-[#6b7280] mt-1">Sus ventas y movimientos de inventario se registran en esta sede.</p>
+          </div>
+        )}
         {!self && (
           <label className="flex items-center gap-2 text-[13px] cursor-pointer">
             <input type="checkbox" checked={active} onChange={(e) => setActive(e.target.checked)} /> Activo (puede entrar al panel)

@@ -4,6 +4,7 @@ import { useApp } from '../../context';
 import { BarRow, Card, PALETTE, Pills, Stat } from '../../components/admin/ui';
 import { addDays, fmt, isValidSale, saleCost, todayVe, veDay } from '../../lib/sales';
 import type { SalesCtx } from '../AdminSales';
+import { useSedes } from '../../lib/sedes';
 
 type Range = 'day' | 'week' | 'month' | 'year';
 const MESES = ['Ene', 'Feb', 'Mar', 'Abr', 'May', 'Jun', 'Jul', 'Ago', 'Sep', 'Oct', 'Nov', 'Dic'];
@@ -85,6 +86,7 @@ export default function ReportsTab({ ctx }: { ctx: SalesCtx }) {
         <Stat label="Ganancia neta" value={fmt(totals.profit)} color="#16a34a" />
         <Stat label="Margen" value={totals.margin + '%'} />
       </div>
+      <SedeBreakdown ctx={ctx} />
       <div className="grid lg:grid-cols-[2fr_1fr] gap-4">
         <Card className="p-4">
           <h3 className="text-[14px] font-semibold mb-3">Ventas vs costo</h3>
@@ -129,5 +131,47 @@ export default function ReportsTab({ ctx }: { ctx: SalesCtx }) {
         </Card>
       </div>
     </div>
+  );
+}
+
+/** Comparativa entre sedes. Sólo aparece al mirar todas juntas. */
+function SedeBreakdown({ ctx }: { ctx: SalesCtx }) {
+  const { sedes, sede, setSede } = useSedes();
+  const rows = useMemo(() => {
+    const valid = ctx.sales.filter(isValidSale);
+    return sedes
+      .map((s) => {
+        const mine = valid.filter((v) => v.locationId === s.id);
+        const revenue = mine.reduce((a, v) => a + v.total, 0);
+        const cost = mine.reduce((a, v) => a + saleCost(v), 0);
+        return { sede: s, count: mine.length, revenue, profit: revenue - cost };
+      })
+      .sort((a, b) => b.revenue - a.revenue);
+  }, [ctx.sales, sedes]);
+  const sinSede = useMemo(() => ctx.sales.filter(isValidSale).filter((v) => !v.locationId).length, [ctx.sales]);
+  if (sede || sedes.length < 2) return null;
+  const max = Math.max(1, ...rows.map((r) => r.revenue));
+
+  return (
+    <Card className="p-4">
+      <h3 className="text-[14px] font-semibold mb-1">Comparativa por sede</h3>
+      <p className="text-[11px] text-[#6b7280] mb-3">Toca una sede para ver sólo la suya en todo el panel.</p>
+      <div className="space-y-1">
+        {rows.map((r, i) => (
+          <button key={r.sede.id} type="button" onClick={() => setSede(r.sede.id)} className="w-full text-left">
+            <BarRow
+              label={r.sede.code}
+              value={r.revenue}
+              max={max}
+              right={`${fmt(r.revenue)} · ${r.count} vta${r.count === 1 ? '' : 's'}`}
+              color={PALETTE[i % PALETTE.length]}
+            />
+          </button>
+        ))}
+      </div>
+      {sinSede > 0 && (
+        <p className="mt-2 text-[11px] text-[#b45309]">{sinSede} venta(s) sin sede: son anteriores a que separaras las sedes.</p>
+      )}
+    </Card>
   );
 }

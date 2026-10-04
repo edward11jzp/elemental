@@ -38,6 +38,8 @@ export interface Sale {
   doc: DocType;
   date: string; // ISO
   userName: string;
+  locationId: string | null;
+  locationName: string;
   customerId: string | null;
   customer: string;
   email: string;
@@ -81,6 +83,8 @@ function rowToSale(r: any): Sale {
     doc: r.doc,
     date: r.date,
     userName: r.user_name ?? '',
+    locationId: r.location_id ?? null,
+    locationName: r.location_name ?? '',
     customerId: r.customer_id ?? null,
     customer: r.customer ?? '',
     email: r.email ?? '',

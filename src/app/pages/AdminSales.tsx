@@ -18,6 +18,7 @@ import CloseTab from './sales/CloseTab';
 import ReportsTab from './sales/ReportsTab';
 import AccountingTab from './sales/AccountingTab';
 import InvoiceModal from './sales/InvoiceModal';
+import { bySede, useSedes } from '../lib/sedes';
 
 export interface SalesCtx {
   isAdmin: boolean; // admin o gerente (anular, fechas pasadas, descuentos, tasas, crédito)
@@ -41,7 +42,10 @@ export default function AdminSales() {
   const isAdmin = isManager;
   const canCosts = can('Ganancias y costos');
   const [tab, setTab] = useState<Tab>('pos');
-  const [sales, setSales] = useState<Sale[]>([]);
+  const [allSales, setAllSales] = useState<Sale[]>([]);
+  const { sede } = useSedes();
+  // Lo que se ve en Facturación, Reportes, Cierre y Contabilidad sigue al selector de sede.
+  const sales = useMemo(() => bySede(allSales, sede), [allSales, sede]);
   const [settings, setSettings] = useState<AdminSettings>(DEFAULT_SETTINGS);
   const [customers, setCustomers] = useState<Customer[]>([]);
   const [invoiceId, setInvoiceId] = useState<string | null>(null);
@@ -49,7 +53,7 @@ export default function AdminSales() {
 
   const reloadSales = useCallback(async () => {
     try {
-      setSales(await listSales());
+      setAllSales(await listSales());
     } catch (e: any) {
       setLoadError(e?.message ?? 'No se pudieron cargar las ventas');
     }

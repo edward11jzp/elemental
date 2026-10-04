@@ -30,6 +30,7 @@ import {
 import { useApp } from '../context';
 import { ROLE_LABEL, moduleOfPath, usePerms } from '../lib/perms';
 import logo from 'figma:asset/480ee1658c29520edefebbfe9dcbc0d422f8424b.png';
+import { useSedes } from '../lib/sedes';
 
 interface NavItem {
   to: string;
@@ -218,6 +219,8 @@ export default function AdminShell({ children }: { children: ReactNode }) {
           </button>
           <h1 className="text-[15px] font-bold text-[#111] truncate">{pageTitle}</h1>
 
+          <SedePicker />
+
           <div className="ml-auto flex items-center gap-2">
             <Link
               to="/admin/orders"
@@ -248,5 +251,24 @@ export default function AdminShell({ children }: { children: ReactNode }) {
         <main>{children}</main>
       </div>
     </div>
+  );
+}
+
+// Selector de sede: decide qué se ve en todo el panel. Vacío = todas juntas.
+function SedePicker() {
+  const { sedes, sede, setSede, ready } = useSedes();
+  if (!ready || sedes.length < 2) return null;
+  return (
+    <select
+      value={sede}
+      onChange={(e) => setSede(e.target.value)}
+      title="Sede que estás viendo"
+      className="h-8 rounded-lg border border-[#e6e6e9] bg-[#fff] px-2 text-[12px] font-medium text-[#111] max-w-[180px]"
+    >
+      <option value="">🏢 Todas las sedes</option>
+      {sedes.filter((s) => s.active).map((s) => (
+        <option key={s.id} value={s.id}>{s.code}</option>
+      ))}
+    </select>
   );
 }

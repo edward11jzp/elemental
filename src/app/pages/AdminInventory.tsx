@@ -20,7 +20,9 @@ import { loadProductCosts, saveProductCost } from '../lib/adminData';
 import { getCustomizationImages } from '../lib/products';
 import { usePerms } from '../lib/perms';
 import { listSuppliers, type Supplier } from '../lib/suppliers';
-import { HeavyImagesBanner, InventoryPanels, LowStockBanner, MovementModal, StockChip, isLow, listMovements, type Movement } from '../components/admin/InventoryExtras';
+import { HeavyImagesBanner, InventoryPanels, LowStockBanner, MovementModal, SeedStockBanner, StockChip, TransferModal, isLow, listMovements, type Movement } from '../components/admin/InventoryExtras';
+import { useSedes } from '../lib/sedes';
+import { loadStock, qtyAt, stockIndex, type StockRow } from '../lib/stock';
 import { loadSizes, saveCustomSize, deleteCustomSize, groupSizes, GROUP_LABELS, type Size, type SizeGroup } from '../sizes';
 
 export default function AdminInventory() {
@@ -42,8 +44,15 @@ export default function AdminInventory() {
   const [lowOnly, setLowOnly] = useState(false);
   const [movements, setMovements] = useState<Movement[]>([]);
   const [movementFor, setMovementFor] = useState<string | null | undefined>(undefined);
-  const reloadMovements = () => listMovements().then(setMovements).catch(() => setMovements([]));
+  const [transferFor, setTransferFor] = useState<string | null | undefined>(undefined);
+  const [stock, setStock] = useState<StockRow[]>([]);
+  const { sede, sedes, nameOf } = useSedes();
+  const reloadStock = () => loadStock().then(setStock).catch(() => setStock([]));
+  const reloadMovements = () => { listMovements().then(setMovements).catch(() => setMovements([])); reloadStock(); };
   useEffect(() => { reloadMovements(); }, [products]);
+  // Existencias de la sede que se está mirando; sin sede elegida, el total.
+  const sIdx = useMemo(() => stockIndex(stock), [stock]);
+  const stockOf = (id: string) => qtyAt(sIdx, id, sede);
   useEffect(() => {
     loadProductCosts().then(setCosts).catch(() => setCosts({}));
   }, []);
@@ -582,6 +591,11 @@ export default function AdminInventory() {
             <Button variant="outline" className="border-border" onClick={() => setMovementFor(null)}>
               ↕ Movimiento
             </Button>
+            {sedes.length > 1 && (
+              <Button onClick={() => setTransferFor(null)} variant="outline">
+                ⇄ Trasladar entre sedes
+              </Button>
+            )}
             <Button 
               onClick={() => setIsAddModalOpen(true)}
               className="bg-white text-black hover:bg-gray-200"
@@ -591,6 +605,7 @@ export default function AdminInventory() {
           </div>
         </div>
 
+        <SeedStockBanner stock={stock} onSaved={reloadMovements} />
         <LowStockBanner products={products} active={lowOnly} onToggle={() => setLowOnly((v) => !v)} />
         <HeavyImagesBanner />
 
@@ -666,9 +681,15 @@ export default function AdminInventory() {
                     </td>}
                     <td className="p-4">
                       <span className={isLow(product) ? 'text-yellow-400 font-semibold' : ''}>
-                        {product.stock.toLocaleString('es-VE')}
+                        {stockOf(product.id).toLocaleString('es-VE')}
                       </span>
                       <span className="text-xs text-muted-foreground"> / {product.minStock ?? 50}</span>
+                      {!sede && sedes.length > 1 && (
+                        <div className="text-[10px] text-muted-foreground mt-0.5">
+                          {sedes.filter((x) => x.active).map((x) => `${x.code} ${qtyAt(sIdx, product.id, x.id)}`).join(' · ')}
+                        </div>
+                      )}
+                      {sede && <div className="text-[10px] text-muted-foreground mt-0.5">en {nameOf(sede)}</div>}
                     </td>
                     <td className="p-4"><StockChip p={product} /></td>
                     <td className="p-4 text-sm text-muted-foreground">{product.location || '—'}</td>
@@ -753,6 +774,13 @@ export default function AdminInventory() {
           productId={movementFor}
           products={products}
           onClose={() => setMovementFor(undefined)}
+          onSaved={reloadMovements}
+        />
+        <TransferModal
+          open={transferFor !== undefined}
+          productId={transferFor}
+          products={products}
+          onClose={() => setTransferFor(undefined)}
           onSaved={reloadMovements}
         />
 

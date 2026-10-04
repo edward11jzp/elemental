@@ -8,6 +8,8 @@ import { createCustomer, fetchBcv, MONEY_ACCOUNTS, saveAdminSetting, accountByKe
 import { getSizeUpcharge } from '../../lib/pricing';
 import type { Product } from '../../types';
 import type { SalesCtx } from '../AdminSales';
+import { useSedes } from '../../lib/sedes';
+import { loadStock, qtyAt, stockIndex, type StockRow } from '../../lib/stock';
 
 interface Line {
   key: string;
@@ -38,6 +40,14 @@ const basePrice = (p: Product, mode: Mode) =>
   mode === 'mayor' && typeof p.wholesalePrice === 'number' ? p.wholesalePrice : p.retailPrice ?? p.price;
 
 export default function PosTab({ ctx }: { ctx: SalesCtx }) {
+  // El punto de venta trabaja con las existencias de la sede de quien vende.
+  const { mySede, sede, nameOf, sedes } = useSedes();
+  const vendeEn = mySede || sede;
+  const [stockRows, setStockRows] = useState<StockRow[]>([]);
+  useEffect(() => { loadStock().then(setStockRows).catch(() => setStockRows([])); }, []);
+  const sIdx = useMemo(() => stockIndex(stockRows), [stockRows]);
+  const stockOf = (id: string) => (vendeEn ? qtyAt(sIdx, id, vendeEn) : 0);
+
   const { products } = useApp();
   const { settings, isAdmin } = ctx;
 
@@ -113,20 +123,20 @@ export default function PosTab({ ctx }: { ctx: SalesCtx }) {
   };
 
   const addProduct = (p: Product) => {
-    if (p.stock <= 0) return;
+    if (stockOf(p.id) <= 0) return;
     const size = p.sizes?.[0];
     const key = `${p.id}|${size ?? ''}|`;
     setLines((prev) => {
       const ex = prev.find((l) => l.key === key);
       const inSale = prev.filter((l) => l.id === p.id).reduce((a, l) => a + l.qty, 0);
-      if (inSale >= p.stock) {
-        toast.error('Stock máximo: ' + p.stock);
+      if (inSale >= stockOf(p.id)) {
+        toast.error('Stock máximo en ' + (nameOf(vendeEn) || 'tu sede') + ': ' + stockOf(p.id));
         return prev;
       }
       if (ex) return prev.map((l) => (l.key === key ? { ...l, qty: l.qty + 1 } : l));
       return [
         ...prev,
-        { key, id: p.id, name: p.name, image: p.image, sizes: p.sizes, size, color: '', qty: 1, price: basePrice(p, mode) + getSizeUpcharge(size), stock: p.stock },
+        { key, id: p.id, name: p.name, image: p.image, sizes: p.sizes, size, color: '', qty: 1, price: basePrice(p, mode) + getSizeUpcharge(size), stock: stockOf(p.id) },
       ];
     });
   };
@@ -336,6 +346,14 @@ export default function PosTab({ ctx }: { ctx: SalesCtx }) {
 
   return (
     <div className="space-y-4">
+      {sedes.length > 1 && !vendeEn && (
+        <div className="rounded-xl border border-[#fecaca] bg-[#fef2f2] px-4 py-3 text-[13px] text-[#b91c1c]">
+          Tu usuario no tiene sede asignada, así que no se puede registrar la venta. Pídele a un administrador que te la asigne en Usuarios y permisos.
+        </div>
+      )}
+      {sedes.length > 1 && vendeEn && (
+        <p className="text-[12px] text-[#6b7280]">Vendiendo en <b>{nameOf(vendeEn)}</b> · las existencias y la venta salen de esa sede.</p>
+      )}
       {/* Tasa del día */}
       <Card className="p-3 flex flex-wrap items-center gap-x-4 gap-y-2">
         <div className="flex items-center gap-2">
@@ -386,8 +404,8 @@ export default function PosTab({ ctx }: { ctx: SalesCtx }) {
           </Card>
           <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 2xl:grid-cols-5 gap-3">
             {list.map((p) => {
-              const left = p.stock - inSaleQty(p.id);
-              const out = p.stock <= 0;
+              const left = stockOf(p.id) - inSaleQty(p.id);
+              const out = stockOf(p.id) <= 0;
               return (
                 <Card key={p.id} className={cx('p-3 transition-colors', out ? 'opacity-40' : 'cursor-pointer hover:border-[#a1a1aa]')} onClick={() => !out && addProduct(p)}>
                   {p.image ? (
