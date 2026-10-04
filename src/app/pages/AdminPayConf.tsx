@@ -90,7 +90,7 @@ export default function AdminPayConf() {
             {p.key === 'binance'
               ? 'Falta la clave de SOLO LECTURA de Binance de Elemental (BINANCE_API_KEY y BINANCE_API_SECRET en Vercel).'
               : p.key === 'zelle'
-                ? 'Falta la contraseña de aplicación del correo de Elemental (GMAIL_USER y GMAIL_APP_PASSWORD en Vercel) y el filtro que reenvía allí los avisos de Chase.'
+                ? 'Falta instalar el script dentro del Gmail de Elemental, el que lee los avisos de Chase y los deja aquí. Mientras no llegue el primer aviso, esta pestaña se queda así.'
                 : p.hint}
           </div>
           <div className="text-[12px] text-[#9ca3af] mt-3">Mientras tanto, confirma estos pagos revisando la app.</div>

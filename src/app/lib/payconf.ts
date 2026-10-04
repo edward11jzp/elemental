@@ -29,11 +29,33 @@ export interface Candidate {
 }
 
 export async function fetchProviderPayments(provider: string, days: number): Promise<{ connected: boolean; payments: IncomingPayment[]; checkedAt?: number }> {
+  // Zelle no se consulta a un servicio: los avisos los deja en el buzón el
+  // script que corre dentro del Gmail de la tienda.
+  if (provider === 'zelle') return fetchInboxPayments(provider, days);
   const { data } = await supabase.auth.getSession();
   const r = await fetch(`/api/${provider}-payments?days=${days}`, { headers: { Authorization: `Bearer ${data.session?.access_token ?? ''}` } });
   const body = await r.json().catch(() => ({}));
   if (!r.ok) throw new Error(body.error || 'No se pudo consultar los cobros');
   return body;
+}
+
+// Cobros que dejó en el buzón un aviso de fuera (hoy, Zelle).
+async function fetchInboxPayments(provider: string, days: number) {
+  const since = new Date(Date.now() - days * 864e5).toISOString();
+  const { data, error } = await supabase
+    .from('incoming_payments')
+    .select('*')
+    .eq('provider', provider)
+    .gte('at', since)
+    .order('at', { ascending: false });
+  if (error) throw new Error(error.message);
+  const payments = (data ?? []).map((r: any) => ({
+    ref: r.ref, time: new Date(r.at).getTime(), amount: Number(r.amount),
+    currency: r.currency ?? 'USD', from: r.from_name ?? '', note: r.note ?? '',
+  }));
+  // Mientras no haya entrado ningún aviso, la pantalla lo da por no conectado.
+  const { count } = await supabase.from('incoming_payments').select('ref', { count: 'exact', head: true }).eq('provider', provider);
+  return { connected: (count ?? 0) > 0, payments, checkedAt: Date.now() };
 }
 
 export async function loadLinks(provider: string): Promise<PayLink[]> {
