@@ -5,7 +5,7 @@ import { Btn, Card, Input, Label, Modal, Pills, Select, Textarea, cx } from '../
 import { fetchProviderPayments, loadLinks } from '../../lib/payconf';
 import { addSalePayment, createSale, fmt, todayVe, PAY_STATES, DOC_TYPES, type DocType, type PayState } from '../../lib/sales';
 import { createCustomer, fetchBcv, MONEY_ACCOUNTS, saveAdminSetting, accountByKey } from '../../lib/adminData';
-import { getSizeUpcharge } from '../../lib/pricing';
+import { getColorUpcharge, getSizeUpcharge } from '../../lib/pricing';
 import type { Product } from '../../types';
 import type { SalesCtx } from '../AdminSales';
 import { useSedes } from '../../lib/sedes';
@@ -114,7 +114,7 @@ export default function PosTab({ ctx }: { ctx: SalesCtx }) {
       if (l.free || !l.id) return l;
       const p = products.find((x) => x.id === l.id);
       if (!p) return l;
-      const np = basePrice(p, m) + getSizeUpcharge(l.size);
+      const np = basePrice(p, m) + getSizeUpcharge(l.size) + getColorUpcharge(l.color);
       if (np !== l.price) changed++;
       return { ...l, price: np };
     });
@@ -146,9 +146,12 @@ export default function PosTab({ ctx }: { ctx: SalesCtx }) {
       const l = prev.find((x) => x.key === key);
       if (!l) return prev;
       const next = { ...l, ...patch };
-      if (patch.size !== undefined && l.id) {
+      if ((patch.size !== undefined || patch.color !== undefined) && l.id) {
         const p = products.find((x) => x.id === l.id);
-        if (p) next.price = basePrice(p, mode) + getSizeUpcharge(patch.size);
+        if (p) {
+          next.price = basePrice(p, mode) + getSizeUpcharge(next.size) + getColorUpcharge(next.color);
+          next.stock = qtyAt(sIdx, p.id, vendeEn, next.size ?? '', next.color ?? '');
+        }
       }
       if (patch.qty !== undefined) {
         let qn = Math.floor(Number(patch.qty));

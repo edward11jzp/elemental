@@ -11,6 +11,14 @@ export const SIZE_UPCHARGES: Record<string, number> = {
 // Umbral de unidades a partir del cual aplica el precio al por mayor.
 export const WHOLESALE_THRESHOLD = 6;
 
+// Recargo por color (USD por unidad): los camuflajeados cuestan más.
+export const COLOR_UPCHARGE = 1;
+
+// Devuelve el recargo por unidad de un color. 0 si no lleva.
+export function getColorUpcharge(color: string | undefined | null): number {
+  return (color ?? '').trim().toUpperCase().startsWith('CAMU') ? COLOR_UPCHARGE : 0;
+}
+
 // Devuelve el recargo por unidad para una talla dada.
 // 0 si la talla no tiene recargo o es undefined.
 export function getSizeUpcharge(size: string | undefined | null): number {
@@ -46,6 +54,7 @@ export function getUnitPrice(
   product: Product,
   size: string | undefined | null,
   totalCartQuantity: number,
+  color?: string | null,
 ): number {
-  return getBaseUnitPrice(product, totalCartQuantity) + getSizeUpcharge(size);
+  return getBaseUnitPrice(product, totalCartQuantity) + getSizeUpcharge(size) + getColorUpcharge(color);
 }
