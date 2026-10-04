@@ -55,8 +55,19 @@ function revisarZelle() {
 
 /** ¿Lo firmó chase.com? Se mira la comprobación que anotó Gmail al recibirlo. */
 function firmadoPorChase(crudo) {
-  var cabeceras = String(crudo).split(/\r?\n\r?\n/)[0];
-  return /dkim=pass[^;]*header\.(?:i=@|d=)(?:[\w.-]+\.)?chase\.com/i.test(cabeceras);
+  // Se desdoblan las cabeceras (las continuaciones empiezan con espacio).
+  var cabeceras = String(crudo).split(/\r?\n\r?\n/)[0].replace(/\r?\n[ \t]+/g, ' ');
+  var lineas = cabeceras.split(/\r?\n/);
+  // Sólo vale la comprobación que escribió Gmail al recibir el correo, que va
+  // de primera. Quien manda un correo puede escribir más abajo una línea
+  // idéntica diciendo que viene de Chase, y sería mentira.
+  for (var i = 0; i < lineas.length; i++) {
+    if (!/^Authentication-Results:/i.test(lineas[i])) { continue; }
+    var v = lineas[i].replace(/^Authentication-Results:\s*/i, '');
+    if (!/^mx\.google\.com\b/i.test(v)) { return false; }
+    return /dkim=pass[^;]*header\.(?:i=@|d=)(?:[\w.-]+\.)?chase\.com/i.test(v);
+  }
+  return false; // sin comprobación de Gmail no se acepta
 }
 
 /** Texto del aviso de Chase → datos del cobro. Null si no es un aviso de cobro. */
@@ -111,4 +122,17 @@ function empezarDeNuevo() {
   var hilos = label.getThreads(0, 200);
   for (var i = 0; i < hilos.length; i++) { hilos[i].removeLabel(label); }
   console.log('Se desmarcaron ' + hilos.length + ' conversación(es).');
+}
+
+/** Comprobación: dice qué leyó de los últimos avisos y si venían firmados. No manda nada. */
+function comprobarUltimos() {
+  var hilos = GmailApp.search('subject:"received money with Zelle" newer_than:30d', 0, 10);
+  console.log('Avisos encontrados: ' + hilos.length);
+  for (var i = 0; i < hilos.length; i++) {
+    var m = hilos[i].getMessages()[0];
+    var ok = firmadoPorChase(m.getRawContent());
+    var d = leerAviso(m.getPlainBody());
+    console.log((ok ? '✅ firmado por Chase' : '❌ SIN firma válida — se descarta') + ' · ' +
+      (d ? ('$' + d.monto + ' de ' + d.de + ' · ref ' + d.ref) : 'no se pudo leer el aviso'));
+  }
 }
