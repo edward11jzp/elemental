@@ -1,6 +1,6 @@
 import { useApp } from '../context';
 import { useNavigate } from 'react-router';
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { Button } from '../components/ui/button';
 import { Input } from '../components/ui/input';
 import { Pencil, Trash2, Upload, X, Star, ChevronDown, ChevronUp, Plus, Ruler } from 'lucide-react';
