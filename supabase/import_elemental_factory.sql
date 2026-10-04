@@ -10,6 +10,13 @@
 -- Repetir la ejecución actualiza tallas, colores y precios en vez de duplicar.
 -- ============================================================================
 
+create or replace function public.norm_name(t text) returns text
+language sql immutable as $$
+  -- Compara nombres ignorando mayúsculas, acentos, espacios y signos: los
+  -- acentos pueden estar guardados de dos formas distintas que se ven igual.
+  select regexp_replace(upper(normalize(coalesce(t, ''), NFD)), '[^A-Z0-9]', '', 'g')
+$$;
+
 begin;
 
 create temporary table _import (
@@ -56,7 +63,7 @@ insert into _import (name, category, subcategory, sizes, colors, retail, wholesa
 -- Los nombres que ya existen en la tienda en línea se distinguen, para que en
 -- el punto de venta no se confundan con los suyos.
 update _import i set name = i.name || ' (facturación)'
- where exists (select 1 from public.products p where upper(p.name) = upper(i.name) and p.web);
+ where exists (select 1 from public.products p where public.norm_name(p.name) = public.norm_name(i.name) and p.web);
 
 insert into public.products (name, category, subcategory, description, retail_price, wholesale_price,
                              image, images, sizes, colors, color_palette, stock, min_stock,
@@ -65,13 +72,13 @@ select i.name, i.category, i.subcategory, '', i.retail, i.wholesale,
        '', '[]'::jsonb, i.sizes, i.colors, '[]'::jsonb, 0, 0,
        false, false, false, false
   from _import i
- where not exists (select 1 from public.products p where upper(p.name) = upper(i.name));
+ where not exists (select 1 from public.products p where public.norm_name(p.name) = public.norm_name(i.name));
 
 update public.products p
    set sizes = i.sizes, colors = i.colors, category = i.category, subcategory = i.subcategory,
        retail_price = i.retail, wholesale_price = i.wholesale, updated_at = now()
   from _import i
- where upper(p.name) = upper(i.name) and p.web = false;
+ where public.norm_name(p.name) = public.norm_name(i.name) and p.web = false;
 
 commit;
 

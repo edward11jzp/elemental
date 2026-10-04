@@ -3077,7 +3077,9 @@ insert into _stock_perm (producto, sede, talla, color, qty) values
 -- acepta el sufijo «(facturación)» que llevan los que chocan con la tienda.
 create or replace function public.norm_name(t text) returns text
 language sql immutable as $$
-  select translate(upper(coalesce(t, '')), 'ÁÉÍÓÚÜÑ', 'AEIOUUN')
+  -- Compara nombres ignorando mayúsculas, acentos, espacios y signos: los
+  -- acentos pueden estar guardados de dos formas distintas que se ven igual.
+  select regexp_replace(upper(normalize(coalesce(t, ''), NFD)), '[^A-Z0-9]', '', 'g')
 $$;
 
 insert into public.product_stock (product_id, location_id, size, color, qty)
@@ -3086,7 +3088,7 @@ select p.id, l.id, s.talla, s.color, sum(s.qty)
   join public.products p
     on not p.web
    and public.norm_name(p.name) in (public.norm_name(s.producto),
-                                    public.norm_name(s.producto) || ' (FACTURACION)')
+                                    public.norm_name(s.producto) || 'FACTURACION')
   join public.locations l
     on public.norm_name(l.name) = public.norm_name(s.sede)
  group by p.id, l.id, s.talla, s.color
@@ -3105,7 +3107,7 @@ select coalesce(string_agg(x.msg, chr(10)), 'TODO BIEN: no quedó nada fuera') a
      where not exists (select 1 from public.products p
                         where not p.web
                           and public.norm_name(p.name) in (public.norm_name(s.producto),
-                                                           public.norm_name(s.producto) || ' (FACTURACION)'))
+                                                           public.norm_name(s.producto) || 'FACTURACION'))
         or not exists (select 1 from public.locations l
                         where public.norm_name(l.name) = public.norm_name(s.sede))
   ) x;
