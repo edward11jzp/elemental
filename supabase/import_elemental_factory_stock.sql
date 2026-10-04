@@ -3072,18 +3072,37 @@ insert into _stock (producto, sede, talla, color, qty) values
   ('VESTIDO', 'ELEMENTAL - Sambil', 'M', '', 1),
   ('VESTIDO', 'ELEMENTAL - Sambil', 'S', '', 3);
 
--- Los nombres que chocaban con la tienda en línea llevan el sufijo.
-update _stock s set producto = s.producto || ' (facturación)'
- where not exists (select 1 from public.products p where upper(p.name) = upper(s.producto) and not p.web)
-   and exists (select 1 from public.products p where upper(p.name) = upper(s.producto || ' (facturación)') and not p.web);
+-- Emparejamiento tolerante: no distingue mayúsculas, acentos ni la Ñ, y
+-- acepta el sufijo «(facturación)» que llevan los que chocan con la tienda.
+create or replace function public.norm_name(t text) returns text
+language sql immutable as $$
+  select translate(upper(coalesce(t, '')), 'ÁÉÍÓÚÜÑ', 'AEIOUUN')
+$$;
 
 insert into public.product_stock (product_id, location_id, size, color, qty)
 select p.id, l.id, s.talla, s.color, sum(s.qty)
   from _stock s
-  join public.products  p on upper(p.name) = upper(s.producto) and not p.web
-  join public.locations l on l.name = s.sede
+  join public.products p
+    on not p.web
+   and public.norm_name(p.name) in (public.norm_name(s.producto),
+                                    public.norm_name(s.producto) || ' (FACTURACION)')
+  join public.locations l
+    on public.norm_name(l.name) = public.norm_name(s.sede)
  group by p.id, l.id, s.talla, s.color
 on conflict (product_id, location_id, size, color) do update set qty = excluded.qty, updated_at = now();
+
+-- Avisa de lo que no encontró producto o sede.
+create temporary table _sin_casar on commit drop as
+select distinct s.producto, s.sede
+  from _stock s
+ where not exists (select 1 from public.products p
+                    where not p.web
+                      and public.norm_name(p.name) in (public.norm_name(s.producto),
+                                                       public.norm_name(s.producto) || ' (FACTURACION)'))
+    or not exists (select 1 from public.locations l where public.norm_name(l.name) = public.norm_name(s.sede));
+
+select coalesce(string_agg(distinct producto || ' / ' || sede, ' · '), 'todo encontró su producto y su sede')
+  from _sin_casar;
 
 commit;
 
