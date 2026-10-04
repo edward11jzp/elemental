@@ -93,19 +93,31 @@ export default function PosTab({ ctx }: { ctx: SalesCtx }) {
 
   // Modales
   const [freeOpen, setFreeOpen] = useState(false);
+  // El catálogo del mostrador y la vitrina de la tienda se miran por separado.
+  const [tipo, setTipo] = useState<'facturacion' | 'web' | 'todos'>(() => {
+    try { return (localStorage.getItem('elemental_pos_tipo') as any) ?? 'facturacion'; } catch { return 'facturacion'; }
+  });
+  useEffect(() => { try { localStorage.setItem('elemental_pos_tipo', tipo); } catch { /* ventana privada */ } }, [tipo]);
   const [custOpen, setCustOpen] = useState(false);
 
   useEffect(() => setTaxRate(String(settings.taxRate || 0)), [settings.taxRate]);
 
-  const categories = useMemo(() => [...new Set(products.map((p) => p.subcategory))], [products]);
+  const esWeb = (p: { web?: boolean }) => p.web !== false;
+  const cuentaFact = products.filter((p) => !esWeb(p)).length;
+  const cuentaWeb = products.length - cuentaFact;
+  const delTipo = useMemo(
+    () => (tipo === 'todos' ? products : products.filter((p) => (tipo === 'web' ? esWeb(p) : !esWeb(p)))),
+    [products, tipo],
+  );
+  const categories = useMemo(() => [...new Set(delTipo.map((p) => p.subcategory))], [delTipo]);
   const list = useMemo(() => {
     const s = q.trim().toLowerCase();
-    return products.filter(
+    return delTipo.filter(
       (p) =>
         (!cat || p.subcategory === cat) &&
         (!s || p.name.toLowerCase().includes(s) || p.id.toLowerCase().includes(s) || (SUBCAT_LABEL[p.subcategory] ?? p.subcategory).toLowerCase().includes(s)),
     );
-  }, [products, q, cat]);
+  }, [delTipo, q, cat]);
 
   const changeMode = (m: Mode) => {
     setMode(m);
@@ -395,6 +407,22 @@ export default function PosTab({ ctx }: { ctx: SalesCtx }) {
         {/* Catálogo */}
         <div className="space-y-3 min-w-0">
           <Card className="p-3 flex flex-wrap gap-2 items-center">
+            <div className="inline-flex rounded-lg border border-[#e6e6e9] bg-[#f1f1f3] p-0.5">
+              {([
+                ['facturacion', '🧾 Facturación', cuentaFact],
+                ['web', '🛍️ Tienda', cuentaWeb],
+                ['todos', 'Todos', products.length],
+              ] as const).map(([k, label, n]) => (
+                <button
+                  key={k}
+                  type="button"
+                  onClick={() => { setTipo(k); setCat(''); }}
+                  className={cx('rounded-md px-2.5 py-1.5 text-[12px] whitespace-nowrap', tipo === k ? 'bg-[#fff] font-semibold text-[#111] shadow-sm' : 'text-[#6b7280]')}
+                >
+                  {label} <span className="opacity-60">{n}</span>
+                </button>
+              ))}
+            </div>
             <Input placeholder="Buscar por nombre, código o categoría…" value={q} onChange={(e) => setQ(e.target.value)} className="flex-1 min-w-[180px]" />
             <Select value={cat} onChange={(e) => setCat(e.target.value)} className="!w-auto">
               <option value="">Todas las categorías</option>
