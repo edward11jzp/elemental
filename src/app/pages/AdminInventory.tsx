@@ -45,6 +45,10 @@ export default function AdminInventory() {
   const [movements, setMovements] = useState<Movement[]>([]);
   const [movementFor, setMovementFor] = useState<string | null | undefined>(undefined);
   const [transferFor, setTransferFor] = useState<string | null | undefined>(undefined);
+  const [tipo, setTipo] = useState<'web' | 'facturacion' | 'todos'>(() => {
+    try { return (localStorage.getItem('elemental_inv_tipo') as any) ?? 'web'; } catch { return 'web'; }
+  });
+  useEffect(() => { try { localStorage.setItem('elemental_inv_tipo', tipo); } catch { /* ventana privada */ } }, [tipo]);
   const [stock, setStock] = useState<StockRow[]>([]);
   const { sede, sedes, nameOf } = useSedes();
   const reloadStock = () => loadStock().then(setStock).catch(() => setStock([]));
@@ -103,10 +107,15 @@ export default function AdminInventory() {
 
   if (!currentUser) return null; // el acceso por módulo lo controla AdminRoot
 
+  // La vitrina de la tienda y el catálogo de facturación se miran por separado.
+  const esWeb = (p: { web?: boolean }) => p.web !== false;
+  const cuentaWeb = products.filter(esWeb).length;
+  const cuentaFact = products.length - cuentaWeb;
   const filteredProducts = products.filter(product => {
     const matchesSearch = product.name.toLowerCase().includes(searchTerm.toLowerCase());
     const matchesCategory = categoryFilter === 'all' || product.category === categoryFilter;
-    return matchesSearch && matchesCategory && (!lowOnly || isLow(product));
+    const matchesTipo = tipo === 'todos' || (tipo === 'web' ? esWeb(product) : !esWeb(product));
+    return matchesSearch && matchesCategory && matchesTipo && (!lowOnly || isLow(product));
   });
 
   const handleAddProduct = async () => {
@@ -603,6 +612,24 @@ export default function AdminInventory() {
               + Agregar Producto
             </Button>
           </div>
+        </div>
+
+        {/* Vitrina de la tienda vs. catálogo de facturación */}
+        <div className="mb-4 inline-flex rounded-lg border border-border bg-secondary p-1">
+          {([
+            ['web', '🛍️ Tienda en línea', cuentaWeb],
+            ['facturacion', '🧾 Solo facturación', cuentaFact],
+            ['todos', 'Todos', products.length],
+          ] as const).map(([k, label, n]) => (
+            <button
+              key={k}
+              type="button"
+              onClick={() => setTipo(k)}
+              className={`px-3 py-1.5 text-sm rounded-md transition-colors ${tipo === k ? 'bg-white text-black font-medium' : 'text-muted-foreground hover:text-white'}`}
+            >
+              {label} <span className="opacity-60">{n}</span>
+            </button>
+          ))}
         </div>
 
         <SeedStockBanner stock={stock} onSaved={reloadMovements} />
