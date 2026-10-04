@@ -47,6 +47,11 @@ export default function PosTab({ ctx }: { ctx: SalesCtx }) {
   useEffect(() => { loadStock().then(setStockRows).catch(() => setStockRows([])); }, []);
   const sIdx = useMemo(() => stockIndex(stockRows), [stockRows]);
   const stockOf = (id: string) => (vendeEn ? qtyAt(sIdx, id, vendeEn) : 0);
+  // Tallas y colores con existencias en la sede, para no vender lo que no hay.
+  const filasDe = (id: string) => (sIdx.get(id) ?? []).filter((r) => (!vendeEn || r.locationId === vendeEn) && r.qty > 0);
+  const tallasCon = (id: string) => [...new Set(filasDe(id).map((r) => r.size))];
+  const coloresCon = (id: string, size: string) =>
+    [...new Set(filasDe(id).filter((r) => (r.size ?? '') === (size ?? '')).map((r) => r.color))];
 
   const { products } = useApp();
   const { settings, isAdmin } = ctx;
@@ -138,8 +143,10 @@ export default function PosTab({ ctx }: { ctx: SalesCtx }) {
 
   const addProduct = (p: Product) => {
     if (stockOf(p.id) <= 0) return;
-    const size = p.sizes?.[0];
-    const key = `${p.id}|${size ?? ''}|`;
+    const conStock = filasDe(p.id);
+    const size = conStock[0]?.size ?? p.sizes?.[0] ?? '';
+    const color = conStock.find((r) => r.size === size)?.color ?? '';
+    const key = `${p.id}|${size ?? ''}|${color}`;
     setLines((prev) => {
       const ex = prev.find((l) => l.key === key);
       const inSale = prev.filter((l) => l.id === p.id).reduce((a, l) => a + l.qty, 0);
@@ -150,7 +157,9 @@ export default function PosTab({ ctx }: { ctx: SalesCtx }) {
       if (ex) return prev.map((l) => (l.key === key ? { ...l, qty: l.qty + 1 } : l));
       return [
         ...prev,
-        { key, id: p.id, name: p.name, image: p.image, sizes: p.sizes, size, color: '', qty: 1, price: basePrice(p, mode) + getSizeUpcharge(size), stock: qtyAt(sIdx, p.id, vendeEn, size, '') },
+        { key, id: p.id, name: p.name, image: p.image, sizes: p.sizes, size, color, qty: 1,
+          price: basePrice(p, mode) + getSizeUpcharge(size) + getColorUpcharge(color),
+          stock: qtyAt(sIdx, p.id, vendeEn, size, color) },
       ];
     });
   };
@@ -161,6 +170,10 @@ export default function PosTab({ ctx }: { ctx: SalesCtx }) {
       if (!l) return prev;
       const next = { ...l, ...patch };
       if ((patch.size !== undefined || patch.color !== undefined) && l.id) {
+        if (patch.size !== undefined) {
+          const posibles = coloresCon(l.id, patch.size ?? '');
+          if (posibles.length && !posibles.includes(next.color ?? '')) next.color = posibles[0];
+        }
         const p = products.find((x) => x.id === l.id);
         if (p) {
           next.price = basePrice(p, mode) + getSizeUpcharge(next.size) + getColorUpcharge(next.color);
@@ -530,14 +543,35 @@ export default function PosTab({ ctx }: { ctx: SalesCtx }) {
                   <button type="button" onClick={() => removeLine(l.key)} className="text-[#9ca3af] hover:text-[#dc2626] px-1" aria-label="Quitar">✕</button>
                 </div>
                 <div className="flex items-center gap-1.5">
-                  {!l.free && l.sizes && l.sizes.length > 0 && (
-                    <Select value={l.size ?? ''} onChange={(e) => updateLine(l.key, { size: e.target.value })} className="!w-auto !py-1 !px-2 !text-[12px]">
-                      {l.sizes.map((s) => (
-                        <option key={s} value={s}>{s}</option>
-                      ))}
-                    </Select>
-                  )}
-                  {!l.free && (
+                  {!l.free && l.id && (() => {
+                    // Sólo las tallas y colores con existencias en esta sede.
+                    const tallas = tallasCon(l.id!);
+                    const colores = coloresCon(l.id!, l.size ?? '');
+                    const opcTallas = tallas.length ? tallas : (l.sizes ?? []);
+                    return (
+                      <>
+                        {opcTallas.length > 0 && (
+                          <Select value={l.size ?? ''} onChange={(e) => updateLine(l.key, { size: e.target.value })} className="!w-auto !py-1 !px-2 !text-[12px]">
+                            {opcTallas.map((t) => (
+                              <option key={t} value={t}>{t || 'única'}</option>
+                            ))}
+                          </Select>
+                        )}
+                        {colores.length > 0 ? (
+                          <Select value={l.color ?? ''} onChange={(e) => updateLine(l.key, { color: e.target.value })} className="!py-1 !px-2 !text-[12px] min-w-0 flex-1">
+                            {colores.map((c) => (
+                              <option key={c} value={c}>
+                                {c || 'sin color'} ({qtyAt(sIdx, l.id!, vendeEn, l.size ?? '', c)})
+                              </option>
+                            ))}
+                          </Select>
+                        ) : (
+                          <Input placeholder="Color" value={l.color ?? ''} onChange={(e) => updateLine(l.key, { color: e.target.value })} className="!py-1 !px-2 !text-[12px] min-w-0 flex-1" />
+                        )}
+                      </>
+                    );
+                  })()}
+                  {!l.free && !l.id && (
                     <Input placeholder="Color" value={l.color ?? ''} onChange={(e) => updateLine(l.key, { color: e.target.value })} className="!py-1 !px-2 !text-[12px] min-w-0 flex-1" />
                   )}
                   <div className="flex items-center gap-1 ml-auto">
