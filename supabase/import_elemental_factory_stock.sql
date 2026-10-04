@@ -8,11 +8,12 @@
 
 begin;
 
-create temporary table _stock (
+drop table if exists _stock_perm;
+create temporary table _stock_perm (
   producto text, sede text, talla text, color text, qty int
-) on commit drop;
+);
 
-insert into _stock (producto, sede, talla, color, qty) values
+insert into _stock_perm (producto, sede, talla, color, qty) values
   ('BODY NIÑO', 'ELEMENTAL - Mall Paseo', '10-12', 'VERDE NAVIDAD', 5),
   ('CHAQUETA NIÑO', 'ELEMENTAL - Mall Paseo', '10-12', 'AZUL OSCURO', 9),
   ('CHAQUETA NIÑO', 'ELEMENTAL - Mall Paseo', '14-16', 'NEGRO', 5),
@@ -3081,7 +3082,7 @@ $$;
 
 insert into public.product_stock (product_id, location_id, size, color, qty)
 select p.id, l.id, s.talla, s.color, sum(s.qty)
-  from _stock s
+  from _stock_perm s
   join public.products p
     on not p.web
    and public.norm_name(p.name) in (public.norm_name(s.producto),
@@ -3091,20 +3092,20 @@ select p.id, l.id, s.talla, s.color, sum(s.qty)
  group by p.id, l.id, s.talla, s.color
 on conflict (product_id, location_id, size, color) do update set qty = excluded.qty, updated_at = now();
 
--- Avisa de lo que no encontró producto o sede.
-create temporary table _sin_casar on commit drop as
-select distinct s.producto, s.sede
-  from _stock s
- where not exists (select 1 from public.products p
-                    where not p.web
-                      and public.norm_name(p.name) in (public.norm_name(s.producto),
-                                                       public.norm_name(s.producto) || ' (FACTURACION)'))
-    or not exists (select 1 from public.locations l where public.norm_name(l.name) = public.norm_name(s.sede));
-
-select coalesce(string_agg(distinct producto || ' / ' || sede, ' · '), 'todo encontró su producto y su sede')
-  from _sin_casar;
-
 commit;
 
 select 'cargadas ' || count(*) || ' combinaciones · ' || sum(qty) || ' unidades'
   from public.product_stock s join public.products p on p.id = s.product_id where not p.web;
+
+-- Último resultado: lo que no encontró producto o sede.
+select coalesce(string_agg(x.msg, chr(10)), 'TODO BIEN: no quedó nada fuera') as revisar
+  from (
+    select distinct 'NO ENCONTRADO: ' || s.producto || '  (sede ' || s.sede || ')' as msg
+      from _stock_perm s
+     where not exists (select 1 from public.products p
+                        where not p.web
+                          and public.norm_name(p.name) in (public.norm_name(s.producto),
+                                                           public.norm_name(s.producto) || ' (FACTURACION)'))
+        or not exists (select 1 from public.locations l
+                        where public.norm_name(l.name) = public.norm_name(s.sede))
+  ) x;
