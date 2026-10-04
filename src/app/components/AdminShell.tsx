@@ -256,8 +256,17 @@ export default function AdminShell({ children }: { children: ReactNode }) {
 
 // Selector de sede: decide qué se ve en todo el panel. Vacío = todas juntas.
 function SedePicker() {
-  const { sedes, sede, setSede, ready } = useSedes();
+  const { sedes, sede, setSede, ready, mySede } = useSedes();
+  const { isManager } = usePerms();
   if (!ready || sedes.length < 2) return null;
+  // Quien no es administrador ni gerente sólo ve su sede: se muestra, no se elige.
+  if (!isManager) {
+    return mySede ? (
+      <span className="h-8 inline-flex items-center rounded-lg border border-[#e6e6e9] bg-[#fff] px-2 text-[12px] font-medium text-[#111]">
+        🏢 {sedes.find((s) => s.id === mySede)?.code ?? ''}
+      </span>
+    ) : null;
+  }
   return (
     <select
       value={sede}

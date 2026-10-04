@@ -2,6 +2,7 @@
 // El selector de la barra superior guarda cuál se está mirando ('' = todas).
 import { createContext, useCallback, useContext, useEffect, useMemo, useState, type ReactNode } from 'react';
 import { supabase } from './supabase';
+import { usePerms } from './perms';
 
 export interface Sede {
   id: string;
@@ -40,6 +41,8 @@ interface SedesCtx {
 const Ctx = createContext<SedesCtx>({ sedes: [], ready: false, sede: '', setSede: () => {}, mySede: '', nameOf: () => '', reload: () => {} });
 
 export function SedesProvider({ children }: { children: ReactNode }) {
+  // Sólo un administrador o gerente cambia de sede; el resto ve la suya.
+  const { isManager } = usePerms();
   const [sedes, setSedes] = useState<Sede[]>([]);
   const [ready, setReady] = useState(false);
   const [mySede, setMySede] = useState('');
@@ -67,9 +70,11 @@ export function SedesProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const value = useMemo<SedesCtx>(() => ({
-    sedes, ready, sede, setSede, mySede, reload,
+    sedes, ready, mySede, reload,
+    sede: isManager ? sede : mySede,
+    setSede: isManager ? setSede : () => {},
     nameOf: (id) => (id ? sedes.find((s) => s.id === id)?.code ?? '—' : '—'),
-  }), [sedes, ready, sede, setSede, mySede, reload]);
+  }), [sedes, ready, sede, setSede, mySede, reload, isManager]);
 
   return <Ctx.Provider value={value}>{children}</Ctx.Provider>;
 }
