@@ -18,6 +18,7 @@ function rowToProduct(row: any): Product {
     colorPalette:       row.color_palette ?? [],
     stock:              row.stock ?? 0,
     emoji:              row.emoji ?? '',
+    web:                row.web !== false,
     minStock:           row.min_stock ?? 50,
     location:           row.location ?? '',
     supplier:           row.supplier ?? '',
@@ -45,6 +46,7 @@ function productToRow(p: Partial<Product> & { name: string }) {
   if (p.colorPalette !== undefined)       row.color_palette        = p.colorPalette;
   if (p.stock !== undefined)              row.stock                = p.stock;
   if (p.emoji !== undefined)              row.emoji                = p.emoji;
+  if (p.web !== undefined)                row.web                  = p.web;
   if (p.minStock !== undefined)           row.min_stock            = p.minStock;
   if (p.location !== undefined)           row.location             = p.location;
   if (p.supplier !== undefined)           row.supplier             = p.supplier;
@@ -61,7 +63,7 @@ function productToRow(p: Partial<Product> & { name: string }) {
 // tienda y el inventario cargaran ~18 MB. Se piden aparte con getCustomizationImages().
 const LIST_COLUMNS =
   'id,name,category,subcategory,description,retail_price,wholesale_price,image,images,sizes,colors,' +
-  'color_palette,emoji,stock,min_stock,location,supplier,allow_custom,custom_pricing,featured,trending,created_at,updated_at';
+  'color_palette,emoji,web,stock,min_stock,location,supplier,allow_custom,custom_pricing,featured,trending,created_at,updated_at';
 
 export async function getCustomizationImages(id: string): Promise<Product['customizationImages']> {
   const { data, error } = await supabase.from('products').select('customization_images').eq('id', id).single();

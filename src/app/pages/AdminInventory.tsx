@@ -22,7 +22,7 @@ import { usePerms } from '../lib/perms';
 import { listSuppliers, type Supplier } from '../lib/suppliers';
 import { HeavyImagesBanner, InventoryPanels, LowStockBanner, MovementModal, SeedStockBanner, StockChip, TransferModal, isLow, listMovements, type Movement } from '../components/admin/InventoryExtras';
 import { useSedes } from '../lib/sedes';
-import { loadStock, qtyAt, stockIndex, type StockRow } from '../lib/stock';
+import { loadStock, qtyAt, stockIndex, variantsOf, type StockRow } from '../lib/stock';
 import { loadSizes, saveCustomSize, deleteCustomSize, groupSizes, GROUP_LABELS, type Size, type SizeGroup } from '../sizes';
 
 export default function AdminInventory() {
@@ -665,7 +665,14 @@ export default function AdminInventory() {
                           </div>
                         )}
                         <div className="min-w-[160px]">
-                          <p>{product.name}</p>
+                          <p>
+                            {product.name}
+                            {product.web === false && (
+                              <span className="ml-2 rounded px-1.5 py-0.5 text-[10px] font-semibold bg-[#e0e7ff] text-[#3730a3]" title="No se muestra en la tienda en línea">
+                                solo facturación
+                              </span>
+                            )}
+                          </p>
                           <p className="text-sm text-muted-foreground">{product.subcategory}</p>
                         </div>
                       </div>
@@ -689,7 +696,13 @@ export default function AdminInventory() {
                           {sedes.filter((x) => x.active).map((x) => `${x.code} ${qtyAt(sIdx, product.id, x.id)}`).join(' · ')}
                         </div>
                       )}
-                      {sede && <div className="text-[10px] text-muted-foreground mt-0.5">en {nameOf(sede)}</div>}
+                      {sede && (
+                        <div className="text-[10px] text-muted-foreground mt-0.5">
+                          {variantsOf(sIdx, product.id, sede).length
+                            ? variantsOf(sIdx, product.id, sede).slice(0, 8).map((v) => `${[v.size, v.color].filter(Boolean).join(' ') || 'sin talla'} ${v.qty}`).join(' · ')
+                            : 'sin existencias en ' + nameOf(sede)}
+                        </div>
+                      )}
                     </td>
                     <td className="p-4"><StockChip p={product} /></td>
                     <td className="p-4 text-sm text-muted-foreground">{product.location || '—'}</td>
@@ -1341,6 +1354,18 @@ export default function AdminInventory() {
                     Privado. Se usa para ganancia y márgenes en Ventas.
                   </p>
                 </div>}
+
+                <div>
+                  <label className="flex items-center gap-2 text-sm cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={editingProduct?.web !== false}
+                      onChange={(e) => setEditingProduct({ ...editingProduct, web: e.target.checked })}
+                    />
+                    Mostrar en la tienda en línea
+                  </label>
+                  <p className="text-xs text-muted-foreground mt-1">Sin marcar, el producto sólo existe para facturar en el mostrador.</p>
+                </div>
 
                 <div>
                   <Label htmlFor="edit-emoji">Emoji (opcional)</Label>

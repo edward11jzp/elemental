@@ -136,7 +136,7 @@ export default function PosTab({ ctx }: { ctx: SalesCtx }) {
       if (ex) return prev.map((l) => (l.key === key ? { ...l, qty: l.qty + 1 } : l));
       return [
         ...prev,
-        { key, id: p.id, name: p.name, image: p.image, sizes: p.sizes, size, color: '', qty: 1, price: basePrice(p, mode) + getSizeUpcharge(size), stock: stockOf(p.id) },
+        { key, id: p.id, name: p.name, image: p.image, sizes: p.sizes, size, color: '', qty: 1, price: basePrice(p, mode) + getSizeUpcharge(size), stock: qtyAt(sIdx, p.id, vendeEn, size, '') },
       ];
     });
   };

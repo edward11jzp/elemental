@@ -10,6 +10,7 @@ export interface Product {
   image: string;
   images: string[];
   emoji?: string; // Ícono que se usa como miniatura cuando no hay foto
+  web?: boolean;  // false = sólo para facturar en el mostrador, no sale en la tienda
   description: string;
   sizes: string[];
   colors: string[];
