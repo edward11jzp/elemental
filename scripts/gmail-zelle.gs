@@ -35,7 +35,7 @@ function revisarZelle() {
       var crudo = m.getRawContent();
       if (!firmadoPorChase(crudo)) { todosOk = false; continue; } // aviso sin firma válida: se ignora
       var d = leerAviso(m.getPlainBody());
-      if (!d) { continue; }
+      if (!d) { todosOk = false; continue; } // no se pudo leer: que no quede marcado
       var ok = enviar(cfg, {
         p_token: cfg.INGEST_TOKEN,
         p_provider: 'zelle',
@@ -61,7 +61,8 @@ function firmadoPorChase(crudo) {
 
 /** Texto del aviso de Chase → datos del cobro. Null si no es un aviso de cobro. */
 function leerAviso(texto) {
-  var t = String(texto || '').replace(/ /g, ' ').replace(/[ \t]+/g, ' ');
+  // Chase escribe los valores entre asteriscos: «Amount *$132.00*».
+  var t = String(texto || '').replace(/\u00a0/g, ' ').replace(/\*/g, '').replace(/[ \t]+/g, ' ');
   var de = /([A-ZÁÉÍÓÚÑ0-9][^\n]{0,80}?)\s+sent you money/i.exec(t);
   var monto = /Amount\s*\$?\s*([\d,]+\.\d{2})/i.exec(t);
   if (!de || !monto) { return null; }
@@ -70,7 +71,7 @@ function leerAviso(texto) {
   // El memo va en la misma línea o en la siguiente; si viene vacía, no hay memo.
   var memo = /Memo:?[ \t]*\r?\n?[ \t]*([^\n]*)/i.exec(t);
   var nota = memo ? memo[1].trim() : '';
-  if (/registered with a Zelle|sent you money|Transaction number|^Amount\b/i.test(nota)) { nota = ''; }
+  if (!nota || nota === 'N/A' || /registered with a Zelle|sent you money|Transaction number|^Amount\b/i.test(nota)) { nota = ''; }
   return {
     de: de[1].trim(),
     monto: Number(monto[1].replace(/,/g, '')),
@@ -101,4 +102,13 @@ function instalarRevisionAutomatica() {
   for (var i = 0; i < t.length; i++) { ScriptApp.deleteTrigger(t[i]); }
   ScriptApp.newTrigger('revisarZelle').timeBased().everyMinutes(5).create();
   console.log('Listo: se revisará cada 5 minutos.');
+}
+
+/** Quita la etiqueta "procesado" para volver a revisar todo desde cero. */
+function empezarDeNuevo() {
+  var label = GmailApp.getUserLabelByName(LABEL);
+  if (!label) { console.log('No hay nada marcado.'); return; }
+  var hilos = label.getThreads(0, 200);
+  for (var i = 0; i < hilos.length; i++) { hilos[i].removeLabel(label); }
+  console.log('Se desmarcaron ' + hilos.length + ' conversación(es).');
 }
