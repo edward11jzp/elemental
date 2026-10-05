@@ -166,7 +166,12 @@ export default function AdminDashboard() {
   const navigate = useNavigate();
   const [range, setRange] = useState<Range>('week');
   // El tablero sigue al selector de sede y al rango elegido.
-  const { sede, nameOf } = useSedes();
+  const { sede, nameOf, sedes } = useSedes();
+  // Los pedidos de la web salen de Envíos Nacionales, así que cuentan para esa sede.
+  const sedeEnvios = useMemo(
+    () => sedes.find((x) => `${x.code} ${x.name}`.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toUpperCase().includes('ENVIO'))?.id ?? '',
+    [sedes],
+  );
   const [ventas, setVentas] = useState<Sale[]>([]);
   const [stock, setStock] = useState<StockRow[]>([]);
   useEffect(() => {
@@ -192,7 +197,7 @@ export default function AdminDashboard() {
     const pos = ventas.filter((v) => isValidSale(v) && (!sede || v.locationId === sede));
     const movs: Movimiento[] = [
       // Los pedidos web sólo cuentan cuando se miran todas las sedes.
-      ...(sede ? [] : paid.map((o) => ({ fecha: o.createdAt, total: o.total }))),
+      ...(!sede || sede === sedeEnvios ? paid.map((o) => ({ fecha: o.createdAt, total: o.total })) : []),
       ...pos.map((v) => ({ fecha: v.date, total: v.total })),
     ];
     const enRango = (iso: string, from: number, to: number) => {
@@ -258,7 +263,7 @@ export default function AdminDashboard() {
       byStatus,
       topProducts,
     };
-  }, [orders, products, range, ventas, sede, sIdx]);
+  }, [orders, products, range, ventas, sede, sIdx, sedeEnvios]);
 
   if (!currentUser) return null; // el acceso por módulo lo controla AdminRoot
 
@@ -276,7 +281,7 @@ export default function AdminDashboard() {
     <div className="px-4 lg:px-6 py-5 space-y-4 max-w-[1600px]">
       <SelfReviewPanel />
       <p className="text-[12px] text-[#6b7280]">
-        {sede ? <>Mostrando <b>{nameOf(sede)}</b> · ventas del mostrador y existencias de esa sede.</>
+        {sede ? <>Mostrando <b>{nameOf(sede)}</b> · ventas del mostrador{sede === sedeEnvios ? ', pedidos de la web' : ''} y existencias de esa sede.</>
               : <>Mostrando <b>todas las sedes</b> · ventas del mostrador, pedidos de la web y existencias de todas.</>}
       </p>
       {/* Selector de rango */}
