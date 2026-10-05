@@ -634,6 +634,23 @@ export default function AdminInventory() {
           ))}
         </div>
 
+        {/* Recordatorio: lo que falta por confirmar de los productos importados */}
+        {(() => {
+          const importados = products.filter((p) => p.web === false);
+          const sinCosto = importados.filter((p) => costs[p.id] == null).length;
+          if (!importados.length || !sinCosto) return null;
+          return (
+            <div className="mb-4 rounded-xl border border-[#fde68a] bg-[#fffbeb] px-4 py-3 text-sm text-[#78350f]">
+              <b>⚠️ Precios por confirmar en {sinCosto} producto(s) importado(s).</b>
+              <ul className="mt-1 list-disc pl-5 text-[13px] space-y-0.5">
+                <li><b>El costo está vacío.</b> Mientras siga así, Reportes y Contabilidad muestran ganancia igual a la venta y margen del 100%, que no es real.</li>
+                <li><b>El precio al mayor es inventado:</b> lo puse en 80% del detal, porque el archivo de Elemental Factory no lo traía. Revísalo antes de vender al por mayor.</li>
+                <li>El precio al detal sí viene de su sistema y está comprobado.</li>
+              </ul>
+            </div>
+          );
+        })()}
+
         <SeedStockBanner stock={stock} onSaved={reloadMovements} />
         <LowStockBanner products={products} active={lowOnly} onToggle={() => setLowOnly((v) => !v)} />
         <HeavyImagesBanner />
