@@ -3,13 +3,26 @@ import { supabase } from './supabase';
 
 export interface StockRow { productId: string; locationId: string; size: string; color: string; qty: number }
 
+// Supabase devuelve 1.000 filas como máximo por consulta, y el inventario
+// tiene varios miles: se piden por tandas hasta que no quede ninguna.
+const TANDA = 1000;
+
 export async function loadStock(): Promise<StockRow[]> {
-  const { data, error } = await supabase.from('product_stock').select('product_id,location_id,size,color,qty');
-  if (error) throw new Error(error.message);
-  return (data ?? []).map((r: any) => ({
-    productId: r.product_id, locationId: r.location_id,
-    size: r.size ?? '', color: r.color ?? '', qty: r.qty ?? 0,
-  }));
+  const todo: StockRow[] = [];
+  for (let desde = 0; ; desde += TANDA) {
+    const { data, error } = await supabase
+      .from('product_stock')
+      .select('product_id,location_id,size,color,qty')
+      .order('product_id')
+      .range(desde, desde + TANDA - 1);
+    if (error) throw new Error(error.message);
+    const tanda = (data ?? []).map((r: any) => ({
+      productId: r.product_id, locationId: r.location_id,
+      size: r.size ?? '', color: r.color ?? '', qty: r.qty ?? 0,
+    }));
+    todo.push(...tanda);
+    if (tanda.length < TANDA) return todo;
+  }
 }
 
 export type StockIndex = Map<string, StockRow[]>;
