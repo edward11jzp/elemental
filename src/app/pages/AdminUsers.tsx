@@ -164,6 +164,24 @@ function EditUserModal({ user, self, onClose }: { user: User; self: boolean; onC
   const [active, setActive] = useState(user.active);
   const { sedes } = useSedes();
   const [loc, setLoc] = useState<string>('');
+  const [enviando, setEnviando] = useState(false);
+
+  // Restablecer la contraseña de otra persona: se le manda el correo de Supabase.
+  const enviarCorreo = async () => {
+    if (!user.email) return toast.error('Ese usuario no tiene correo');
+    setEnviando(true);
+    try {
+      const { error } = await supabase.auth.resetPasswordForEmail(user.email, {
+        redirectTo: window.location.origin + '/admin/login',
+      });
+      if (error) throw new Error(error.message);
+      toast.success('Correo enviado a ' + user.email);
+    } catch (e: any) {
+      toast.error(e?.message ?? 'No se pudo enviar');
+    } finally {
+      setEnviando(false);
+    }
+  };
   // La sede vive en el perfil; sus ventas y movimientos se registran ahí.
   useEffect(() => {
     supabase.from('profiles').select('location_id').eq('id', user.id).maybeSingle()
@@ -196,6 +214,16 @@ function EditUserModal({ user, self, onClose }: { user: User; self: boolean; onC
             {ROLES.map((r) => <option key={r} value={r}>{ROLE_LABEL[r]}</option>)}
           </Select>
         </div>
+        <div className="rounded-lg border border-[#ececef] p-3">
+          <div className="text-[13px] font-medium mb-1">Contraseña</div>
+          <p className="text-[11px] text-[#6b7280] mb-2">
+            Se le envía un correo para que la cambie. Nadie, ni tú, puede ver la contraseña de otra persona.
+          </p>
+          <Btn variant="ghost" disabled={enviando} onClick={enviarCorreo}>
+            {enviando ? 'Enviando…' : '✉️ Enviar correo para cambiar la contraseña'}
+          </Btn>
+        </div>
+
         {sedes.length > 0 && (
           <div>
             <Label>Sede</Label>

@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router';
 import { useApp } from '../context';
 import { Button } from '../components/ui/button';
@@ -6,14 +6,42 @@ import { Input } from '../components/ui/input';
 import { Label } from '../components/ui/label';
 import { toast } from 'sonner';
 import { isStaffRole } from '../lib/perms';
+import { supabase } from '../lib/supabase';
 
 export default function AdminLogin() {
-  const [mode, setMode] = useState<'login' | 'setup'>('login');
+  const [mode, setMode] = useState<'login' | 'setup' | 'recuperar'>('login');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [loading, setLoading] = useState(false);
   const { login } = useApp();
   const navigate = useNavigate();
+
+  // Si se llega desde el correo de restablecimiento, se pide la nueva contraseña.
+  useEffect(() => {
+    const hash = window.location.hash || '';
+    if (hash.includes('type=recovery')) setMode('recuperar');
+    const { data } = supabase.auth.onAuthStateChange((evento) => {
+      if (evento === 'PASSWORD_RECOVERY') setMode('recuperar');
+    });
+    return () => data.subscription.unsubscribe();
+  }, []);
+
+  const guardarNueva = async () => {
+    if (password.length < 6) return toast.error('La contraseña debe tener al menos 6 caracteres');
+    setLoading(true);
+    try {
+      const { error } = await supabase.auth.updateUser({ password });
+      if (error) throw new Error(error.message);
+      toast.success('Contraseña cambiada ✓ ya puedes entrar');
+      window.history.replaceState(null, '', '/admin/login');
+      setMode('login');
+      setPassword('');
+    } catch (e: any) {
+      toast.error(e?.message ?? 'No se pudo cambiar');
+    } finally {
+      setLoading(false);
+    }
+  };
 
   const handleSetup = async () => {
     if (!email || !password) {
@@ -76,7 +104,8 @@ export default function AdminLogin() {
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    if (mode === 'setup') handleSetup();
+    if (mode === 'recuperar') guardarNueva();
+    else if (mode === 'setup') handleSetup();
     else handleLogin('admin');
   };
 
@@ -84,15 +113,19 @@ export default function AdminLogin() {
     <div className="bg-black min-h-screen flex items-center justify-center py-12">
       <div className="max-w-md w-full px-4">
         <div className="bg-card p-8 rounded-lg">
-          <h1 className="text-3xl mb-2">{mode === 'setup' ? 'Crear Cuenta de Administrador' : 'Portal de Administrador'}</h1>
+          <h1 className="text-3xl mb-2">
+            {mode === 'recuperar' ? 'Nueva contraseña' : mode === 'setup' ? 'Crear Cuenta de Administrador' : 'Portal de Administrador'}
+          </h1>
           <p className="text-muted-foreground mb-6">
-            {mode === 'setup'
-              ? 'Elige tu correo y contraseña — esta cuenta será la admin principal.'
-              : 'Inicia sesión para acceder al panel de administración'}
+            {mode === 'recuperar'
+              ? 'Escribe la contraseña con la que vas a entrar de ahora en adelante.'
+              : mode === 'setup'
+                ? 'Elige tu correo y contraseña — esta cuenta será la admin principal.'
+                : 'Inicia sesión para acceder al panel de administración'}
           </p>
           
           <form onSubmit={handleSubmit} className="space-y-4">
-            <div>
+            <div className={mode === 'recuperar' ? 'hidden' : ''}>
               <Label htmlFor="email">Correo Electrónico</Label>
               <Input
                 id="email"
@@ -100,12 +133,12 @@ export default function AdminLogin() {
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
                 className="bg-secondary border-border text-white"
-                required
+                required={mode !== 'recuperar'}
               />
             </div>
 
             <div>
-              <Label htmlFor="password">Contraseña</Label>
+              <Label htmlFor="password">{mode === 'recuperar' ? 'Nueva contraseña' : 'Contraseña'}</Label>
               <Input
                 id="password"
                 type="password"
@@ -122,8 +155,8 @@ export default function AdminLogin() {
               className="w-full bg-white text-black hover:bg-gray-200 disabled:opacity-60"
             >
               {loading
-                ? (mode === 'setup' ? 'Creando…' : 'Iniciando…')
-                : (mode === 'setup' ? 'Crear Cuenta Admin' : 'Iniciar Sesión en Portal de Administrador')}
+                ? (mode === 'recuperar' ? 'Guardando…' : mode === 'setup' ? 'Creando…' : 'Iniciando…')
+                : (mode === 'recuperar' ? 'Guardar contraseña' : mode === 'setup' ? 'Crear Cuenta Admin' : 'Iniciar Sesión en Portal de Administrador')}
             </Button>
 
             {mode === 'login' && (
