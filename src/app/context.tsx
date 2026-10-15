@@ -423,6 +423,16 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     refreshProducts();
     refreshSubcategories();
 
+    // Los productos se piden al abrir la página, cuando la sesión todavía puede
+    // no estar lista: entonces la base responde como a un visitante y deja
+    // fuera el catálogo de facturación. Al entrar o restaurarse la sesión se
+    // vuelven a pedir.
+    const { data: authSub } = supabase.auth.onAuthStateChange((evento) => {
+      if (evento === 'SIGNED_IN' || evento === 'INITIAL_SESSION' || evento === 'TOKEN_REFRESHED') {
+        refreshProducts();
+      }
+    });
+
     // Debounce realtime refetches so a burst of events triggers a single fetch.
     let productsTimer: ReturnType<typeof setTimeout> | null = null;
     let subcatsTimer: ReturnType<typeof setTimeout> | null = null;
@@ -446,6 +456,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       .subscribe();
 
     return () => {
+      authSub.subscription.unsubscribe();
       if (productsTimer) clearTimeout(productsTimer);
       if (subcatsTimer) clearTimeout(subcatsTimer);
       supabase.removeChannel(productsChannel);
