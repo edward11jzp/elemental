@@ -119,14 +119,15 @@ export default function AdminUsers() {
 
 function InviteModal({ onClose }: { onClose: () => void }) {
   const { createStaffUser } = useApp();
-  const [f, setF] = useState({ name: '', email: '', password: '', phone: '', role: 'sales' });
+  const [f, setF] = useState({ name: '', email: '', password: '', phone: '', role: 'sales', loc: '' });
   const [busy, setBusy] = useState(false);
+  const { sedes } = useSedes();
   const save = async () => {
     if (!f.name.trim() || !f.email.trim()) return toast.error('Nombre y email son obligatorios');
     if (f.password.length < 6) return toast.error('La contraseña debe tener al menos 6 caracteres');
     setBusy(true);
     try {
-      await createStaffUser(f.email.trim(), f.password, f.name.trim(), f.role, f.phone || undefined);
+      await createStaffUser(f.email.trim(), f.password, f.name.trim(), f.role, f.phone || undefined, f.loc || null);
       toast.success('✅ Usuario creado: ' + f.email);
       onClose();
     } catch (e: any) {
@@ -149,6 +150,15 @@ function InviteModal({ onClose }: { onClose: () => void }) {
               {ROLES.map((r) => <option key={r} value={r}>{ROLE_LABEL[r]}</option>)}
             </Select>
           </div>
+          {sedes.length > 0 && (
+            <div>
+              <Label>Sede</Label>
+              <Select value={f.loc} onChange={(e) => setF({ ...f, loc: e.target.value })}>
+                <option value="">— Sin sede —</option>
+                {sedes.filter((x) => x.active).map((x) => <option key={x.id} value={x.id}>{x.code}</option>)}
+              </Select>
+            </div>
+          )}
         </div>
         <p className="text-[11px] text-[#6b7280]">Comparte el correo y la contraseña inicial con la persona; podrá cambiarla desde «🔑 Mi contraseña».</p>
         <div className="flex justify-end gap-2"><Btn variant="ghost" onClick={onClose}>Cancelar</Btn><Btn disabled={busy} onClick={save}>{busy ? 'Creando…' : 'Crear usuario'}</Btn></div>

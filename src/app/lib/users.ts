@@ -53,6 +53,7 @@ export async function createStaff(
   name: string,
   role: string,
   phone?: string,
+  locationId?: string | null,
 ): Promise<void> {
   const client = getSignupClient();
   const { data, error } = await client.auth.signUp({
@@ -72,6 +73,15 @@ export async function createStaff(
     new_phone: phone ?? null,
   });
   if (roleErr) throw roleErr;
+
+  // La sede vive en el perfil; de ella salen sus ventas y sus movimientos.
+  if (locationId) {
+    const { error: locErr } = await supabase
+      .from('profiles')
+      .update({ location_id: locationId })
+      .eq('id', data.user.id);
+    if (locErr) throw locErr;
+  }
 }
 
 export async function setUserActive(userId: string, active: boolean): Promise<void> {

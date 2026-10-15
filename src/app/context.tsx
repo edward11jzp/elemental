@@ -38,7 +38,7 @@ interface AppContextType {
   // Users Management
   users: User[];
   refreshUsers: () => Promise<void>;
-  createStaffUser: (email: string, password: string, name: string, role: string, phone?: string) => Promise<void>;
+  createStaffUser: (email: string, password: string, name: string, role: string, phone?: string, locationId?: string | null) => Promise<void>;
   updateUser: (userId: string, updates: Partial<User>) => Promise<void>;
   toggleUserActive: (userId: string) => Promise<void>;
   deleteUser: (userId: string) => Promise<void>;
@@ -605,8 +605,9 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     name: string,
     role: string,
     phone?: string,
+    locationId?: string | null,
   ) => {
-    await usersApi.createStaff(email, password, name, role, phone);
+    await usersApi.createStaff(email, password, name, role, phone, locationId);
     await refreshUsers();
   };
 
