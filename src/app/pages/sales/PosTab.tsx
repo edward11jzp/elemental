@@ -50,6 +50,15 @@ export default function PosTab({ ctx }: { ctx: SalesCtx }) {
   // Tallas y colores con existencias en la sede, para no vender lo que no hay.
   const filasDe = (id: string) => (sIdx.get(id) ?? []).filter((r) => (!vendeEn || r.locationId === vendeEn) && r.qty > 0);
   const tallasCon = (id: string) => [...new Set(filasDe(id).map((r) => r.size))];
+  // Lo que hay del producto en las demas sedes, para avisar al cliente.
+  const enOtrasSedes = (id: string) =>
+    (sIdx.get(id) ?? [])
+      .filter((r) => r.locationId !== vendeEn && r.qty > 0)
+      .reduce((acc, r) => {
+        const nombre = nameOf(r.locationId);
+        acc.set(nombre, (acc.get(nombre) ?? 0) + r.qty);
+        return acc;
+      }, new Map<string, number>());
   const coloresCon = (id: string, size: string) =>
     [...new Set(filasDe(id).filter((r) => (r.size ?? '') === (size ?? '')).map((r) => r.color))];
 
@@ -461,6 +470,12 @@ export default function PosTab({ ctx }: { ctx: SalesCtx }) {
                   )}
                   <div className="text-[13px] font-medium mt-2 leading-tight line-clamp-2">{p.name}</div>
                   <div className="text-[11px] text-[#6b7280]">{p.sku ? <span className="font-mono">{p.sku}</span> : SUBCAT_LABEL[p.subcategory] ?? p.subcategory} · stock {left}</div>
+                  {sedes.length > 1 && enOtrasSedes(p.id).size > 0 && (
+                    <div className={cx('text-[10px] mt-0.5', out ? 'text-[#b45309] font-medium' : 'text-[#9ca3af]')}>
+                      {out ? '🏢 hay en: ' : 'otras: '}
+                      {[...enOtrasSedes(p.id).entries()].map(([n, q]) => `${n} ${q}`).join(' · ')}
+                    </div>
+                  )}
                   <div className="font-semibold mt-1 text-[14px]">
                     {fmt(basePrice(p, mode))}
                     {mode === 'mayor' && <span className="ml-1 text-[10px] font-normal text-[#9333ea]">mayor</span>}

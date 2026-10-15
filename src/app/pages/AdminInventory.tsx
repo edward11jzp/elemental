@@ -745,6 +745,11 @@ export default function AdminInventory() {
                           {sedes.filter((x) => x.active).map((x) => `${x.code} ${qtyAt(sIdx, product.id, x.id)}`).join(' · ')}
                         </div>
                       )}
+                      {sede && qtyAt(sIdx, product.id, '') - stockOf(product.id) > 0 && (
+                        <div className="text-[10px] text-yellow-500 mt-0.5">
+                          en otras sedes: {qtyAt(sIdx, product.id, '') - stockOf(product.id)}
+                        </div>
+                      )}
                       {sede && (
                         <div className="text-[10px] text-muted-foreground mt-0.5">
                           {variantsOf(sIdx, product.id, sede).length
