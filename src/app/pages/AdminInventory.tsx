@@ -596,15 +596,15 @@ export default function AdminInventory() {
     <div className="bg-black min-h-screen">
       
       <div className="max-w-[1600px] px-4 lg:px-6 py-6">
-        <div className="flex justify-between items-center mb-8">
-          <h1 className="text-4xl">Gestión de Inventario</h1>
-          <div className="flex gap-2">
+        <div className="flex flex-wrap justify-between items-center gap-3 mb-6 sm:mb-8">
+          <h1 className="text-2xl sm:text-4xl">Inventario</h1>
+          <div className="flex flex-wrap gap-2">
             <Button variant="outline" className="border-border" onClick={() => setMovementFor(null)}>
               ↕ Movimiento
             </Button>
             {sedes.length > 1 && (
               <Button onClick={() => setTransferFor(null)} variant="outline">
-                ⇄ Trasladar entre sedes
+                ⇄ <span className="hidden sm:inline">Trasladar entre sedes</span><span className="sm:hidden">Trasladar</span>
               </Button>
             )}
             <Button 
@@ -617,7 +617,7 @@ export default function AdminInventory() {
         </div>
 
         {/* Vitrina de la tienda vs. catálogo de facturación */}
-        <div className="mb-4 inline-flex rounded-lg border border-border bg-secondary p-1">
+        <div className="mb-4 flex max-w-full overflow-x-auto rounded-lg border border-border bg-secondary p-1">
           {([
             ['web', '🛍️ Tienda en línea', cuentaWeb],
             ['facturacion', '🧾 Solo facturación', cuentaFact],
@@ -627,7 +627,7 @@ export default function AdminInventory() {
               key={k}
               type="button"
               onClick={() => setTipo(k)}
-              className={`px-3 py-1.5 text-sm rounded-md transition-colors ${tipo === k ? 'bg-white text-black font-medium' : 'text-muted-foreground hover:text-white'}`}
+              className={`whitespace-nowrap px-3 py-1.5 text-sm rounded-md transition-colors ${tipo === k ? 'bg-white text-black font-medium' : 'text-muted-foreground hover:text-white'}`}
             >
               {label} <span className="opacity-60">{n}</span>
             </button>

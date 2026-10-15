@@ -6,7 +6,6 @@ import { Btn, Card, Input, Label, Modal, Select, cx } from '../components/admin/
 import { LOCKED, MODULES, ROLES, ROLE_LABEL, isStaffRole, sanitize, savePermissions, usePerms, type Matrix } from '../lib/perms';
 import type { User } from '../types';
 import { useSedes } from '../lib/sedes';
-import { supabase } from '../lib/supabase';
 
 const GRADIENTS = ['from-[#a855f7] to-[#ef4444]', 'from-[#ef4444] to-[#22c55e]', 'from-[#06b6d4] to-[#3b82f6]', 'from-[#f59e0b] to-[#f97316]', 'from-[#22c55e] to-[#14b8a6]'];
 const initials = (n: string) => n.split(/\s+/).map((x) => x[0]).join('').slice(0, 2).toUpperCase();

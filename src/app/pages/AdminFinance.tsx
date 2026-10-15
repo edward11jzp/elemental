@@ -86,8 +86,8 @@ export default function AdminFinance() {
 
   return (
     <div className="max-w-full">
-      <div className="mb-8">
-        <h1 className="text-3xl mb-2">Calculadora Financiera</h1>
+      <div className="mb-6 sm:mb-8">
+        <h1 className="text-2xl sm:text-3xl mb-2">Calculadora Financiera</h1>
         <p className="text-muted-foreground">
           Conversión $ → Bs → USDT → COP y ganancia neta por prenda. Los campos amarillos son de
           entrada manual; los azules se calculan solos.

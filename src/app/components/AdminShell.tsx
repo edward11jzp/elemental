@@ -217,7 +217,7 @@ export default function AdminShell({ children }: { children: ReactNode }) {
           >
             <Menu className="h-5 w-5" />
           </button>
-          <h1 className="text-[15px] font-bold text-[#111] truncate">{pageTitle}</h1>
+          <h1 className="hidden sm:block text-[15px] font-bold text-[#111] truncate">{pageTitle}</h1>
 
           <SedePicker />
 
