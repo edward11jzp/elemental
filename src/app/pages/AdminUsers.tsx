@@ -20,7 +20,7 @@ const ROLE_HELP: Record<string, string> = {
 
 export default function AdminUsers() {
   const { users, currentUser, refreshUsers } = useApp();
-  const { matrix, reload } = usePerms();
+  const { matrix, reload, isAdmin } = usePerms();
   const staff = users.filter((u) => isStaffRole(u.role));
   const [edit, setEdit] = useState<User | null>(null);
   const [inviteOpen, setInviteOpen] = useState(false);
@@ -74,6 +74,14 @@ export default function AdminUsers() {
           </div>
         </Card>
 
+        {!isAdmin ? (
+          <Card className="p-4 text-[13px] text-[#6b7280]">
+            <h3 className="text-[15px] font-semibold mb-2 text-[#111]">Permisos</h3>
+            Puedes <b>dar de alta</b> personal nuevo y ponerle su rol y su sede. Cambiar el rol de alguien
+            que ya es del personal, activar o desactivar cuentas, eliminarlas y tocar la matriz de
+            permisos son cosas del administrador.
+          </Card>
+        ) : (
         <Card className="p-4 overflow-x-auto">
           <h3 className="text-[15px] font-semibold mb-3">Matriz de permisos</h3>
           <div className="min-w-[560px]">
@@ -108,6 +116,7 @@ export default function AdminUsers() {
             <span className="text-[12px] text-[#6b7280]">El administrador siempre conserva acceso total. «Ganancias y costos» decide quién ve costos, ganancia y márgenes.</span>
           </div>
         </Card>
+        )}
       </div>
 
       {inviteOpen && <InviteModal onClose={() => setInviteOpen(false)} />}
@@ -122,6 +131,7 @@ function InviteModal({ onClose }: { onClose: () => void }) {
   const [f, setF] = useState({ name: '', email: '', password: '', phone: '', role: 'sales', loc: '' });
   const [busy, setBusy] = useState(false);
   const { sedes } = useSedes();
+  const { isAdmin } = usePerms();
   const save = async () => {
     if (!f.name.trim() || !f.email.trim()) return toast.error('Nombre y email son obligatorios');
     if (f.password.length < 6) return toast.error('La contraseña debe tener al menos 6 caracteres');
@@ -147,7 +157,7 @@ function InviteModal({ onClose }: { onClose: () => void }) {
           <div>
             <Label>Rol</Label>
             <Select value={f.role} onChange={(e) => setF({ ...f, role: e.target.value })}>
-              {ROLES.map((r) => <option key={r} value={r}>{ROLE_LABEL[r]}</option>)}
+              {ROLES.filter((r) => isAdmin || r !== 'admin').map((r) => <option key={r} value={r}>{ROLE_LABEL[r]}</option>)}
             </Select>
           </div>
           {sedes.length > 0 && (
@@ -169,6 +179,7 @@ function InviteModal({ onClose }: { onClose: () => void }) {
 
 function EditUserModal({ user, self, onClose }: { user: User; self: boolean; onClose: () => void }) {
   const { updateUser, deleteUser } = useApp();
+  const { isAdmin } = usePerms();
   const [name, setName] = useState(user.name);
   const [role, setRole] = useState(user.role === 'employee' ? 'sales' : user.role);
   const [active, setActive] = useState(user.active);
@@ -244,13 +255,13 @@ function EditUserModal({ user, self, onClose }: { user: User; self: boolean; onC
             <p className="text-[11px] text-[#6b7280] mt-1">Sus ventas y movimientos de inventario se registran en esta sede.</p>
           </div>
         )}
-        {!self && (
+        {!self && isAdmin && (
           <label className="flex items-center gap-2 text-[13px] cursor-pointer">
             <input type="checkbox" checked={active} onChange={(e) => setActive(e.target.checked)} /> Activo (puede entrar al panel)
           </label>
         )}
         <div className="flex items-center justify-between pt-1">
-          {!self ? <Btn variant="danger" onClick={del}>Eliminar</Btn> : <span />}
+          {!self && isAdmin ? <Btn variant="danger" onClick={del}>Eliminar</Btn> : <span />}
           <div className="flex gap-2"><Btn variant="ghost" onClick={onClose}>Cancelar</Btn><Btn onClick={save}>Guardar</Btn></div>
         </div>
       </div>

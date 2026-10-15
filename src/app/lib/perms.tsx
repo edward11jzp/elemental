@@ -25,7 +25,10 @@ export const MODULES = [
 ] as const;
 export type Module = (typeof MODULES)[number];
 // Siempre sólo del admin (nadie puede encerrarse fuera ni ver el historial).
-export const LOCKED: Module[] = ['Usuarios y permisos', 'Registro de actividad', 'Configuración'];
+// Módulos que sólo puede tener el admin. «Usuarios y permisos» se puede dar
+// a la gerente para que dé de alta al personal; lo que ella no puede hacer
+// dentro (borrar, cambiar roles, tocar la matriz) lo impide la base de datos.
+export const LOCKED: Module[] = ['Registro de actividad', 'Configuración'];
 
 export type Matrix = Record<string, number[]>;
 export const DEFAULT_MATRIX: Matrix = {
@@ -41,7 +44,7 @@ export const DEFAULT_MATRIX: Matrix = {
   'Cambio de divisas': [1, 1, 0, 0, 0],
   Personal: [1, 1, 0, 0, 0],
   Proveedores: [1, 1, 0, 0, 0],
-  'Usuarios y permisos': [1, 0, 0, 0, 0],
+  'Usuarios y permisos': [1, 0, 0, 0, 0], // el admin se la puede dar a la gerente
   'Registro de actividad': [1, 0, 0, 0, 0],
   Configuración: [1, 0, 0, 0, 0],
 };
