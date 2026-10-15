@@ -617,19 +617,20 @@ export default function AdminInventory() {
         </div>
 
         {/* Vitrina de la tienda vs. catálogo de facturación */}
-        <div className="mb-4 flex max-w-full overflow-x-auto rounded-lg border border-border bg-secondary p-1">
+        <div className="mb-4 grid grid-cols-3 gap-1 rounded-lg border border-border bg-secondary p-1 sm:inline-flex sm:gap-0">
           {([
-            ['web', '🛍️ Tienda en línea', cuentaWeb],
-            ['facturacion', '🧾 Solo facturación', cuentaFact],
-            ['todos', 'Todos', products.length],
-          ] as const).map(([k, label, n]) => (
+            ['web', '🛍️ Tienda en línea', '🛍️ Tienda', cuentaWeb],
+            ['facturacion', '🧾 Solo facturación', '🧾 Factura', cuentaFact],
+            ['todos', 'Todos', 'Todos', products.length],
+          ] as const).map(([k, label, corto, n]) => (
             <button
               key={k}
               type="button"
               onClick={() => setTipo(k)}
-              className={`whitespace-nowrap px-3 py-1.5 text-sm rounded-md transition-colors ${tipo === k ? 'bg-white text-black font-medium' : 'text-muted-foreground hover:text-white'}`}
+              className={`rounded-md px-2 py-1.5 text-xs sm:text-sm sm:px-3 sm:whitespace-nowrap transition-colors ${tipo === k ? 'bg-white text-black font-medium' : 'text-muted-foreground hover:text-white'}`}
             >
-              {label} <span className="opacity-60">{n}</span>
+              <span className="sm:hidden">{corto}</span>
+              <span className="hidden sm:inline">{label}</span> <span className="opacity-60">{n}</span>
             </button>
           ))}
         </div>
@@ -677,8 +678,75 @@ export default function AdminInventory() {
           </div>
         </div>
 
+        {/* En el teléfono: una tarjeta por producto, sin tener que desplazar de lado */}
+        <div className="sm:hidden space-y-2">
+          {filteredProducts.map((product) => {
+            const enSede = stockOf(product.id);
+            const enOtras = qtyAt(sIdx, product.id, '') - enSede;
+            const detalle = sede ? variantsOf(sIdx, product.id, sede) : [];
+            return (
+              <div key={product.id} className="bg-card rounded-lg p-3">
+                <div className="flex gap-3">
+                  {product.image ? (
+                    <img src={product.image} alt={product.name} className="h-14 w-14 shrink-0 rounded object-cover" />
+                  ) : (
+                    <div className="h-14 w-14 shrink-0 rounded bg-secondary flex items-center justify-center text-2xl">
+                      {product.emoji || '📦'}
+                    </div>
+                  )}
+                  <div className="min-w-0 flex-1">
+                    <p className="leading-tight">{product.name}</p>
+                    <p className="text-xs text-muted-foreground mt-0.5">
+                      {product.sku ? <span className="font-mono">{product.sku}</span> : null}
+                      {product.sku ? ' · ' : ''}{product.subcategory}
+                      {product.web === false && <span className="ml-1 rounded px-1 py-0.5 text-[10px] bg-[#e0e7ff] text-[#3730a3]">facturación</span>}
+                    </p>
+                    <p className="text-sm mt-1">
+                      <span className="text-white">${product.retailPrice || product.price}</span>
+                      <span className="text-muted-foreground"> detal</span>
+                      <span className="text-green-400 ml-2">${product.wholesalePrice || 0}</span>
+                      <span className="text-muted-foreground"> mayor</span>
+                      {showCosts && costs[product.id] != null && (
+                        <span className="text-muted-foreground ml-2">· costo ${costs[product.id]}</span>
+                      )}
+                    </p>
+                  </div>
+                  <div className="text-right shrink-0">
+                    <div className={isLow(product) ? 'text-yellow-400' : ''}>{enSede.toLocaleString('es-VE')}</div>
+                    <div className="text-[10px] text-muted-foreground">{sede ? nameOf(sede) : 'total'}</div>
+                    {enOtras > 0 && sede && <div className="text-[10px] text-yellow-500 mt-0.5">+{enOtras} en otras</div>}
+                  </div>
+                </div>
+
+                {detalle.length > 0 && (
+                  <p className="text-[11px] text-muted-foreground mt-2 leading-snug">
+                    {detalle.slice(0, 10).map((v) => `${[v.size, v.color].filter(Boolean).join(' ') || 'sin talla'} ${v.qty}`).join(' · ')}
+                  </p>
+                )}
+
+                <div className="flex gap-2 mt-3">
+                  <Button variant="outline" className="flex-1 h-9" onClick={() => setMovementFor(product.id)}>↕ Movimiento</Button>
+                  <Button
+                    variant="outline"
+                    className="flex-1 h-9"
+                    onClick={() => {
+                      setEditingProduct(product);
+                      setIsEditModalOpen(true);
+                    }}
+                  >
+                    ✎ Editar
+                  </Button>
+                </div>
+              </div>
+            );
+          })}
+          {!filteredProducts.length && (
+            <p className="text-center text-muted-foreground py-8">No hay productos que coincidan.</p>
+          )}
+        </div>
+
         {/* Products Table */}
-        <div className="bg-card rounded-lg overflow-hidden">
+        <div className="hidden sm:block bg-card rounded-lg overflow-hidden">
           <div className="overflow-x-auto">
             <table className="w-full">
               <thead className="bg-secondary">
