@@ -43,6 +43,7 @@ const PRINCIPAL: NavItem[] = [
   { to: '/admin/dashboard', label: 'Dashboard', icon: BarChart3, iconClass: 'text-[#2563eb]' },
   { to: '/admin/orders', label: 'Pedidos', icon: Package, iconClass: 'text-[#b45309]' },
   { to: '/admin/inventory', label: 'Inventario', icon: Boxes, iconClass: 'text-[#374151]' },
+  { to: '/admin/transfers', label: 'Traslados', icon: ArrowLeftRight, iconClass: 'text-[#0d9488]' },
   { to: '/admin/customers', label: 'Clientes', icon: Contact, iconClass: 'text-[#0891b2]' },
   { to: '/admin/staff', label: 'Personal', icon: UserCog, iconClass: 'text-[#7c3aed]' },
   { to: '/admin/sales', label: 'Ventas y Facturación', icon: Receipt, iconClass: 'text-[#ca8a04]' },

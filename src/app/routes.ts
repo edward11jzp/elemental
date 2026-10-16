@@ -36,6 +36,7 @@ const AdminAccounts = lazy(() => import("./pages/AdminAccounts"));
 const AdminStaff = lazy(() => import("./pages/AdminStaff"));
 const AdminPayConf = lazy(() => import("./pages/AdminPayConf"));
 const AdminSuppliers = lazy(() => import("./pages/AdminSuppliers"));
+const AdminTransfers = lazy(() => import("./pages/AdminTransfers"));
 const AdminAudit = lazy(() => import("./pages/AdminAudit"));
 
 export const router = createBrowserRouter([
@@ -81,6 +82,7 @@ export const router = createBrowserRouter([
       { path: "staff", Component: AdminStaff },
       { path: "payconf", Component: AdminPayConf },
       { path: "suppliers", Component: AdminSuppliers },
+      { path: "transfers", Component: AdminTransfers },
       { path: "audit", Component: AdminAudit },
     ],
   },

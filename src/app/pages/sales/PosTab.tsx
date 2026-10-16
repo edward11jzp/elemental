@@ -9,6 +9,7 @@ import { getColorUpcharge, getSizeUpcharge } from '../../lib/pricing';
 import type { Product } from '../../types';
 import type { SalesCtx } from '../AdminSales';
 import { useSedes } from '../../lib/sedes';
+import { pedirTraslado } from '../../lib/transfers';
 import { loadStock, qtyAt, stockIndex, type StockRow } from '../../lib/stock';
 
 interface Line {
@@ -148,6 +149,26 @@ export default function PosTab({ ctx }: { ctx: SalesCtx }) {
     });
     setLines(next);
     if (changed) toast(`Precios al ${m} · ${changed} línea${changed === 1 ? '' : 's'} actualizada${changed === 1 ? '' : 's'}`);
+  };
+
+  // Pide la mercancía a la tienda que la tiene, sin salir del mostrador.
+  const pedirAOtra = async (p: Product) => {
+    const filas = (sIdx.get(p.id) ?? []).filter((r) => r.locationId !== vendeEn && r.qty > 0);
+    if (!filas.length) return toast.error('No hay en ninguna otra tienda');
+    const opciones = filas.map((r, i) => `${i + 1}) ${nameOf(r.locationId)} · ${[r.size, r.color].filter(Boolean).join(' ') || 'sin talla'} · ${r.qty}`);
+    const elegido = prompt(`¿Qué pides de ${p.name}?\n\n${opciones.join('\n')}\n\nEscribe el número:`);
+    const idx = Number(elegido) - 1;
+    const fila = filas[idx];
+    if (!fila) return;
+    const cuantas = Math.floor(Number(prompt(`¿Cuántas piezas? (hay ${fila.qty})`, '1') ?? 0));
+    if (!(cuantas > 0)) return;
+    const nota = prompt('Nota para la otra tienda (opcional)') ?? '';
+    try {
+      await pedirTraslado(p.id, fila.locationId, cuantas, fila.size, fila.color, nota);
+      toast.success(`Pedido enviado a ${nameOf(fila.locationId)} · lo verás en Traslados`);
+    } catch (e: any) {
+      toast.error(e.message);
+    }
   };
 
   const addProduct = (p: Product) => {
@@ -471,10 +492,21 @@ export default function PosTab({ ctx }: { ctx: SalesCtx }) {
                   <div className="text-[13px] font-medium mt-2 leading-tight line-clamp-2">{p.name}</div>
                   <div className="text-[11px] text-[#6b7280]">{p.sku ? <span className="font-mono">{p.sku}</span> : SUBCAT_LABEL[p.subcategory] ?? p.subcategory} · stock {left}</div>
                   {sedes.length > 1 && enOtrasSedes(p.id).size > 0 && (
-                    <div className={cx('text-[10px] mt-0.5', out ? 'text-[#b45309] font-medium' : 'text-[#9ca3af]')}>
-                      {out ? '🏢 hay en: ' : 'otras: '}
-                      {[...enOtrasSedes(p.id).entries()].map(([n, q]) => `${n} ${q}`).join(' · ')}
-                    </div>
+                    <>
+                      <div className={cx('text-[10px] mt-0.5', out ? 'text-[#b45309] font-medium' : 'text-[#9ca3af]')}>
+                        {out ? '🏢 hay en: ' : 'otras: '}
+                        {[...enOtrasSedes(p.id).entries()].map(([n, q]) => `${n} ${q}`).join(' · ')}
+                      </div>
+                      {out && (
+                        <button
+                          type="button"
+                          className="mt-1 w-full rounded-md border border-[#e6e6e9] bg-[#fff] px-2 py-1 text-[10px] text-[#111] hover:bg-[#f4f4f5]"
+                          onClick={(e) => { e.stopPropagation(); pedirAOtra(p); }}
+                        >
+                          ⇄ Pedir a otra tienda
+                        </button>
+                      )}
+                    </>
                   )}
                   <div className="font-semibold mt-1 text-[14px]">
                     {fmt(basePrice(p, mode))}
