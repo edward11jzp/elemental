@@ -57,6 +57,12 @@ export default function AdminInventory() {
   // Existencias de la sede que se está mirando; sin sede elegida, el total.
   const sIdx = useMemo(() => stockIndex(stock), [stock]);
   const stockOf = (id: string) => qtyAt(sIdx, id, sede);
+  // Lo que hay del producto en las demás sedes, tienda por tienda.
+  const otrasSedes = (id: string) =>
+    sedes
+      .filter((x) => x.id !== sede)
+      .map((x) => ({ code: x.code, qty: qtyAt(sIdx, id, x.id) }))
+      .filter((x) => x.qty > 0);
   useEffect(() => {
     loadProductCosts().then(setCosts).catch(() => setCosts({}));
   }, []);
@@ -718,6 +724,12 @@ export default function AdminInventory() {
                   </div>
                 </div>
 
+                {enOtras > 0 && sede && (
+                  <p className="text-[11px] text-yellow-500 mt-2 leading-snug">
+                    🏢 {otrasSedes(product.id).map((x) => `${x.code} ${x.qty}`).join(' · ')}
+                  </p>
+                )}
+
                 {detalle.length > 0 && (
                   <p className="text-[11px] text-muted-foreground mt-2 leading-snug">
                     {detalle.slice(0, 10).map((v) => `${[v.size, v.color].filter(Boolean).join(' ') || 'sin talla'} ${v.qty}`).join(' · ')}
@@ -813,9 +825,9 @@ export default function AdminInventory() {
                           {sedes.filter((x) => x.active).map((x) => `${x.code} ${qtyAt(sIdx, product.id, x.id)}`).join(' · ')}
                         </div>
                       )}
-                      {sede && qtyAt(sIdx, product.id, '') - stockOf(product.id) > 0 && (
+                      {sede && otrasSedes(product.id).length > 0 && (
                         <div className="text-[10px] text-yellow-500 mt-0.5">
-                          en otras sedes: {qtyAt(sIdx, product.id, '') - stockOf(product.id)}
+                          🏢 {otrasSedes(product.id).map((x) => `${x.code} ${x.qty}`).join(' · ')}
                         </div>
                       )}
                       {sede && (
