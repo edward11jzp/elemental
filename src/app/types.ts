@@ -96,6 +96,7 @@ export interface User {
   active: boolean;
   createdAt: string;
   phone?: string; // Teléfono para clientes
+  locationId?: string | null; // Sede del personal
 }
 
 // Search Types

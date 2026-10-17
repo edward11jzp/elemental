@@ -36,6 +36,7 @@ function rowToUser(row: any): AppUser {
     active:    row.active,
     createdAt: row.created_at,
     phone:     row.phone ?? undefined,
+    locationId: row.location_id ?? null,
   };
 }
 
@@ -75,13 +76,17 @@ export async function createStaff(
   if (roleErr) throw roleErr;
 
   // La sede vive en el perfil; de ella salen sus ventas y sus movimientos.
-  if (locationId) {
-    const { error: locErr } = await supabase
-      .from('profiles')
-      .update({ location_id: locationId })
-      .eq('id', data.user.id);
-    if (locErr) throw locErr;
-  }
+  // Va por la función de la base: una gerente no puede escribir el perfil de
+  // otro directamente.
+  if (locationId) await setUserLocation(data.user.id, locationId);
+}
+
+export async function setUserLocation(userId: string, locationId: string | null): Promise<void> {
+  const { error } = await supabase.rpc('admin_set_user_location', {
+    target_id: userId,
+    new_location: locationId,
+  });
+  if (error) throw error;
 }
 
 export async function setUserActive(userId: string, active: boolean): Promise<void> {

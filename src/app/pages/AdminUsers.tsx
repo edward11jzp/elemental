@@ -6,6 +6,7 @@ import { Btn, Card, Input, Label, Modal, Select, cx } from '../components/admin/
 import { LOCKED, MODULES, ROLES, ROLE_LABEL, isStaffRole, sanitize, savePermissions, usePerms, type Matrix } from '../lib/perms';
 import type { User } from '../types';
 import { useSedes } from '../lib/sedes';
+import { setUserLocation } from '../lib/users';
 
 const GRADIENTS = ['from-[#a855f7] to-[#ef4444]', 'from-[#ef4444] to-[#22c55e]', 'from-[#06b6d4] to-[#3b82f6]', 'from-[#f59e0b] to-[#f97316]', 'from-[#22c55e] to-[#14b8a6]'];
 const initials = (n: string) => n.split(/\s+/).map((x) => x[0]).join('').slice(0, 2).toUpperCase();
@@ -76,9 +77,8 @@ export default function AdminUsers() {
         {!isAdmin ? (
           <Card className="p-4 text-[13px] text-[#6b7280]">
             <h3 className="text-[15px] font-semibold mb-2 text-[#111]">Permisos</h3>
-            Puedes <b>dar de alta</b> personal nuevo y ponerle su rol y su sede. Cambiar el rol de alguien
-            que ya es del personal, activar o desactivar cuentas, eliminarlas y tocar la matriz de
-            permisos son cosas del administrador.
+            Administras a todo el personal: crear, cambiar rol y sede, activar, desactivar y eliminar.
+            Los <b>administradores</b> y la <b>matriz de permisos</b> sólo los maneja un administrador.
           </Card>
         ) : (
         <Card className="p-4 overflow-x-auto">
@@ -178,12 +178,14 @@ function InviteModal({ onClose }: { onClose: () => void }) {
 
 function EditUserModal({ user, self, onClose }: { user: User; self: boolean; onClose: () => void }) {
   const { updateUser, deleteUser } = useApp();
-  const { isAdmin } = usePerms();
+  const { isAdmin, isManager } = usePerms();
+  // El admin administra a cualquiera; la gerente, a quien no sea admin.
+  const puede = isAdmin || (isManager && user.role !== 'admin');
   const [name, setName] = useState(user.name);
   const [role, setRole] = useState(user.role === 'employee' ? 'sales' : user.role);
   const [active, setActive] = useState(user.active);
   const { sedes } = useSedes();
-  const [loc, setLoc] = useState<string>('');
+  const [loc, setLoc] = useState<string>(user.locationId ?? '');
   const [enviando, setEnviando] = useState(false);
 
   // Restablecer la contraseña de otra persona: se le manda el correo de Supabase.
@@ -202,17 +204,12 @@ function EditUserModal({ user, self, onClose }: { user: User; self: boolean; onC
       setEnviando(false);
     }
   };
-  // La sede vive en el perfil; sus ventas y movimientos se registran ahí.
-  useEffect(() => {
-    supabase.from('profiles').select('location_id').eq('id', user.id).maybeSingle()
-      .then(({ data }) => setLoc((data as any)?.location_id ?? ''));
-  }, [user.id]);
+
   const save = async () => {
     if (!name.trim()) return toast.error('El nombre es obligatorio');
     try {
       await updateUser(user.id, { name: name.trim(), role: role as User['role'], ...(active !== user.active ? { active } : {}) });
-      const { error } = await supabase.from('profiles').update({ location_id: loc || null }).eq('id', user.id);
-      if (error) throw new Error(error.message);
+      if ((loc || null) !== (user.locationId ?? null)) await setUserLocation(user.id, loc || null);
       toast.success('Usuario actualizado ✓');
       onClose();
     } catch (e: any) {
@@ -247,20 +244,20 @@ function EditUserModal({ user, self, onClose }: { user: User; self: boolean; onC
         {sedes.length > 0 && (
           <div>
             <Label>Sede</Label>
-            <Select value={loc} onChange={(e) => setLoc(e.target.value)}>
+            <Select value={loc} onChange={(e) => setLoc(e.target.value)} disabled={!puede && !self}>
               <option value="">— Sin sede —</option>
               {sedes.filter((x) => x.active).map((x) => <option key={x.id} value={x.id}>{x.code}</option>)}
             </Select>
             <p className="text-[11px] text-[#6b7280] mt-1">Sus ventas y movimientos de inventario se registran en esta sede.</p>
           </div>
         )}
-        {!self && isAdmin && (
+        {!self && puede && (
           <label className="flex items-center gap-2 text-[13px] cursor-pointer">
             <input type="checkbox" checked={active} onChange={(e) => setActive(e.target.checked)} /> Activo (puede entrar al panel)
           </label>
         )}
         <div className="flex items-center justify-between pt-1">
-          {!self && isAdmin ? <Btn variant="danger" onClick={del}>Eliminar</Btn> : <span />}
+          {!self && puede ? <Btn variant="danger" onClick={del}>Eliminar</Btn> : <span />}
           <div className="flex gap-2"><Btn variant="ghost" onClick={onClose}>Cancelar</Btn><Btn onClick={save}>Guardar</Btn></div>
         </div>
       </div>
