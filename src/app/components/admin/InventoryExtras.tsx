@@ -9,6 +9,7 @@ import { uploadImageKeepAlpha } from '../../lib/storage';
 import type { Product } from '../../types';
 import { Btn, Card, Input, Label, Modal, Select, cx } from './ui';
 import { useSedes } from '../../lib/sedes';
+import type { Estado } from '../../lib/alertas';
 import { registerMovement, seedStockInto, transferStock, type StockRow } from '../../lib/stock';
 
 export interface Movement {
@@ -29,8 +30,16 @@ export async function listMovements(limit = 12): Promise<Movement[]> {
 
 export const isLow = (p: Product) => p.stock <= (p.minStock ?? 50);
 
-export function StockChip({ p }: { p: Product }) {
-  const [label, color] = p.stock <= 0 ? ['Agotado', '#ef4444'] : isLow(p) ? ['Bajo', '#f59e0b'] : ['OK', '#22c55e'];
+const ESTADO: Record<Estado, [string, string]> = {
+  web: ['Vitrina', '#71717a'],
+  sin: ['No se vende aquí', '#a1a1aa'],
+  agotado: ['Agotado', '#ef4444'],
+  bajo: ['Bajo', '#f59e0b'],
+  ok: ['OK', '#22c55e'],
+};
+
+export function StockChip({ estado }: { estado: Estado }) {
+  const [label, color] = ESTADO[estado];
   return (
     <span className="inline-flex rounded-full px-2 py-0.5 text-[11px] font-semibold" style={{ background: color + '22', color }}>
       {label}
@@ -38,13 +47,15 @@ export function StockChip({ p }: { p: Product }) {
   );
 }
 
-export function LowStockBanner({ products, active, onToggle }: { products: Product[]; active: boolean; onToggle: () => void }) {
-  const n = products.filter(isLow).length;
+export function LowStockBanner({ n, donde, active, onToggle }: { n: number; donde: string; active: boolean; onToggle: () => void }) {
   if (!n && !active) return null;
   return (
     <div className="mb-4 flex items-center gap-3 rounded-xl border border-[#fde68a] bg-[#fffbeb] px-4 py-3 text-[13px] text-[#92400e]">
       <span className="text-lg">⚠️</span>
-      <div className="flex-1"><b>{n}</b> producto{n === 1 ? '' : 's'} con inventario bajo necesita{n === 1 ? '' : 'n'} reposición.</div>
+      <div className="flex-1">
+        <b>{n}</b> producto{n === 1 ? '' : 's'} por debajo de su mínimo {donde}.
+        <span className="block text-[11px]">Sólo cuenta el inventario de facturación; la vitrina de la web no se alerta.</span>
+      </div>
       <Btn variant="ghost" className="!py-1 !text-[12px]" onClick={onToggle}>{active ? 'Ver todos' : 'Ver'}</Btn>
     </div>
   );

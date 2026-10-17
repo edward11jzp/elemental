@@ -22,6 +22,8 @@ import { usePerms } from '../lib/perms';
 import { listSuppliers, type Supplier } from '../lib/suppliers';
 import { HeavyImagesBanner, InventoryPanels, LowStockBanner, MovementModal, SeedStockBanner, StockChip, TransferModal, isLow, listMovements, type Movement } from '../components/admin/InventoryExtras';
 import { useSedes } from '../lib/sedes';
+import type { Product } from '../types';
+import { MINIMO_POR_DEFECTO, estadoDe, minimoDe, sedesBajas } from '../lib/alertas';
 import { loadStock, qtyAt, stockIndex, variantsOf, type StockRow } from '../lib/stock';
 import { loadSizes, saveCustomSize, deleteCustomSize, groupSizes, GROUP_LABELS, type Size, type SizeGroup } from '../sizes';
 
@@ -57,6 +59,8 @@ export default function AdminInventory() {
   // Existencias de la sede que se está mirando; sin sede elegida, el total.
   const sIdx = useMemo(() => stockIndex(stock), [stock]);
   const stockOf = (id: string) => qtyAt(sIdx, id, sede);
+  const estado = (p: Product) => estadoDe(p, sIdx, sede, sedes);
+  const bajo = (p: Product) => estado(p) === 'bajo' || estado(p) === 'agotado';
   // Lo que hay del producto en las demás sedes, tienda por tienda.
   const otrasSedes = (id: string) =>
     sedes
@@ -123,7 +127,7 @@ export default function AdminInventory() {
     const matchesSearch = !q || product.name.toLowerCase().includes(q) || codigos.includes(q);
     const matchesCategory = categoryFilter === 'all' || product.category === categoryFilter;
     const matchesTipo = tipo === 'todos' || (tipo === 'web' ? esWeb(product) : !esWeb(product));
-    return matchesSearch && matchesCategory && matchesTipo && (!lowOnly || isLow(product));
+    return matchesSearch && matchesCategory && matchesTipo && (!lowOnly || bajo(product));
   });
 
   const handleAddProduct = async () => {
@@ -461,7 +465,7 @@ export default function AdminInventory() {
           ? editingProduct.sizes
           : ['S', 'M', 'L', 'XL', '2XL'],
         customizationImages: editingProduct.customizationImages,
-        minStock: Math.max(0, parseInt(String(editingProduct.minStock ?? 50)) || 0),
+        minStock: Math.max(0, parseInt(String(editingProduct.minStock ?? 0)) || 0),
         emoji: String(editingProduct.emoji ?? '').trim(),
         location: String(editingProduct.location ?? '').trim(),
         supplier: String(editingProduct.supplier ?? ''),
@@ -659,7 +663,12 @@ export default function AdminInventory() {
         })()}
 
         <SeedStockBanner stock={stock} onSaved={reloadMovements} />
-        <LowStockBanner products={products} active={lowOnly} onToggle={() => setLowOnly((v) => !v)} />
+        <LowStockBanner
+          n={products.filter(bajo).length}
+          donde={sede ? 'en ' + nameOf(sede) : 'en alguna sede'}
+          active={lowOnly}
+          onToggle={() => setLowOnly((v) => !v)}
+        />
         <HeavyImagesBanner />
 
         {/* Filters */}
@@ -718,7 +727,7 @@ export default function AdminInventory() {
                     </p>
                   </div>
                   <div className="text-right shrink-0">
-                    <div className={isLow(product) ? 'text-yellow-400' : ''}>{enSede.toLocaleString('es-VE')}</div>
+                    <div className={bajo(product) ? 'text-yellow-400' : ''}>{enSede.toLocaleString('es-VE')}</div>
                     <div className="text-[10px] text-muted-foreground">{sede ? nameOf(sede) : 'total'}</div>
                     {enOtras > 0 && sede && <div className="text-[10px] text-yellow-500 mt-0.5">+{enOtras} en otras</div>}
                   </div>
@@ -816,10 +825,10 @@ export default function AdminInventory() {
                         : '—'}
                     </td>}
                     <td className="p-4">
-                      <span className={isLow(product) ? 'text-yellow-400 font-semibold' : ''}>
+                      <span className={bajo(product) ? 'text-yellow-400 font-semibold' : ''}>
                         {stockOf(product.id).toLocaleString('es-VE')}
                       </span>
-                      <span className="text-xs text-muted-foreground"> / {product.minStock ?? 50}</span>
+                      {product.web === false && <span className="text-xs text-muted-foreground"> / mín {minimoDe(product)}</span>}
                       {!sede && sedes.length > 1 && (
                         <div className="text-[10px] text-muted-foreground mt-0.5">
                           {sedes.filter((x) => x.active).map((x) => `${x.code} ${qtyAt(sIdx, product.id, x.id)}`).join(' · ')}
@@ -838,7 +847,14 @@ export default function AdminInventory() {
                         </div>
                       )}
                     </td>
-                    <td className="p-4"><StockChip p={product} /></td>
+                    <td className="p-4">
+                      <StockChip estado={estado(product)} />
+                      {!sede && sedesBajas(product, sIdx, sedes).length > 0 && (
+                        <div className="text-[10px] text-yellow-500 mt-1">
+                          {sedesBajas(product, sIdx, sedes).map((x) => `${x.sede.code} ${x.qty}`).join(' · ')}
+                        </div>
+                      )}
+                    </td>
                     <td className="p-4 text-sm text-muted-foreground">{product.location || '—'}</td>
                     <td className="p-4 text-sm text-muted-foreground">{product.supplier || '—'}</td>
                     <td className="p-4">
@@ -1531,15 +1547,20 @@ export default function AdminInventory() {
                 </div>
 
                 <div>
-                  <Label htmlFor="edit-minStock">Stock mínimo (alerta)</Label>
+                  <Label htmlFor="edit-minStock">Stock mínimo por sede (alerta)</Label>
                   <Input
                     id="edit-minStock"
                     type="number"
                     min="0"
-                    value={editingProduct?.minStock ?? 50}
+                    value={editingProduct?.minStock || ''}
+                    placeholder={String(MINIMO_POR_DEFECTO)}
                     onChange={(e) => setEditingProduct({ ...editingProduct, minStock: e.target.value })}
                     className="bg-secondary border-border text-white"
                   />
+                  <p className="text-xs text-muted-foreground mt-1">
+                    Avisa cuando en una tienda quedan menos piezas que esto. Vacío = {MINIMO_POR_DEFECTO}.
+                    Sólo aplica al catálogo de facturación.
+                  </p>
                 </div>
 
                 <div>

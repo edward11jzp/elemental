@@ -17,6 +17,7 @@ import type { Order, OrderStatus } from '../types';
 import { getRetailUnitPrice } from '../lib/pricing';
 import { SelfReviewPanel } from '../lib/selfReview';
 import { useSedes } from '../lib/sedes';
+import { esFacturacion, estadoDe, minimoDe, sedesBajas } from '../lib/alertas';
 import { loadStock, qtyAt, stockIndex, type StockRow } from '../lib/stock';
 import { isValidSale, listSales, type Sale } from '../lib/sales';
 
@@ -48,7 +49,6 @@ const STATUS_META: Record<OrderStatus, { label: string; color: string }> = {
   rejected: { label: 'Rechazado', color: '#ef4444' },
 };
 
-const LOW_STOCK = 50;
 const DAY = 24 * 60 * 60 * 1000;
 
 const money = (n: number) =>
@@ -257,22 +257,29 @@ export default function AdminDashboard() {
       unitsSold: paid.reduce((s, o) => s + o.items.reduce((a, i) => a + i.quantity, 0), 0),
       stockUnits: products.reduce((s, p) => s + unidades(p.id), 0),
       stockValue: products.reduce((s, p) => s + unidades(p.id) * getRetailUnitPrice(p), 0),
-      outOfStock: products.filter((p) => unidades(p.id) <= 0).length,
-      lowStock: products.filter((p) => unidades(p.id) > 0 && unidades(p.id) < LOW_STOCK).length,
+      // Las alertas sólo miran el catálogo de facturación (ver lib/alertas).
+      outOfStock: products.filter((p) => estadoDe(p, sIdx, sede, sedes) === 'agotado').length,
+      lowStock: products.filter((p) => estadoDe(p, sIdx, sede, sedes) === 'bajo').length,
       series: buildSeries(range, movs, now),
       byStatus,
       topProducts,
     };
-  }, [orders, products, range, ventas, sede, sIdx, sedeEnvios]);
+  }, [orders, products, range, ventas, sede, sIdx, sedeEnvios, sedes]);
 
   if (!currentUser) return null; // el acceso por módulo lo controla AdminRoot
 
   const pieData = stats.byStatus.filter((s) => s.value > 0);
+  // Lo que hay que reponer: en la sede elegida, o en qué sede falta si se miran todas.
   const lowStockList = products
-    .map((p) => ({ ...p, stock: unidades(p.id) }))
-    .filter((p) => p.stock < LOW_STOCK)
-    .sort((a, b) => a.stock - b.stock)
-    .slice(0, 6);
+    .filter(esFacturacion)
+    .map((p) => {
+      const est = estadoDe(p, sIdx, sede, sedes);
+      const donde = sede ? '' : sedesBajas(p, sIdx, sedes).map((x) => `${x.sede.code} ${x.qty}`).join(' · ');
+      return { ...p, stock: unidades(p.id), est, donde, min: minimoDe(p) };
+    })
+    .filter((p) => p.est === 'bajo' || p.est === 'agotado')
+    .sort((a, b) => (a.est === b.est ? a.stock - b.stock : a.est === 'agotado' ? -1 : 1))
+    .slice(0, 8);
   const recent = [...orders]
     .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())
     .slice(0, 6);
@@ -439,17 +446,23 @@ export default function AdminDashboard() {
               <ul className="divide-y divide-[#f0f0f2]">
                 {lowStockList.map((p) => (
                   <li key={p.id} className="flex items-center gap-3 py-2.5">
-                    <img src={p.image} alt={p.name} className="h-9 w-9 rounded-md object-cover bg-[#f1f1f3]" />
+                    {p.image ? (
+                      <img src={p.image} alt={p.name} className="h-9 w-9 rounded-md object-cover bg-[#f1f1f3]" />
+                    ) : (
+                      <div className="h-9 w-9 rounded-md bg-[#f1f1f3] flex items-center justify-center">{p.emoji || '📦'}</div>
+                    )}
                     <div className="min-w-0 flex-1">
                       <p className="truncate text-[13px] text-[#111]">{p.name}</p>
-                      <p className="text-[11px] text-[#6b7280] capitalize">{p.category}</p>
+                      <p className="text-[11px] text-[#6b7280] truncate">
+                        {p.donde ? `bajo en: ${p.donde}` : `mínimo ${p.min} por sede`}
+                      </p>
                     </div>
                     <span
-                      className={`rounded-full px-2 py-0.5 text-[11px] font-semibold ${
-                        p.stock <= 0 ? 'bg-[#fee2e2] text-[#b91c1c]' : 'bg-[#fef3c7] text-[#a16207]'
+                      className={`rounded-full px-2 py-0.5 text-[11px] font-semibold whitespace-nowrap ${
+                        p.est === 'agotado' ? 'bg-[#fee2e2] text-[#b91c1c]' : 'bg-[#fef3c7] text-[#a16207]'
                       }`}
                     >
-                      {p.stock <= 0 ? 'Agotado' : `${p.stock} restantes`}
+                      {p.est === 'agotado' ? 'Agotado' : `${p.stock} restantes`}
                     </span>
                   </li>
                 ))}
