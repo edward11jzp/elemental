@@ -64,7 +64,7 @@ export default function DocsTab({ ctx }: { ctx: SalesCtx }) {
                 <td className="font-semibold whitespace-nowrap">{s.id} <SelfReviewBadge refId={s.id} /></td>
                 <td><span className="rounded-md border border-[#e6e6e9] bg-[#f4f4f5] px-2 py-0.5 text-[11px] whitespace-nowrap">{docLabel(s.doc)}</span></td>
                 <td className="text-[12px] text-[#6b7280] whitespace-nowrap">{saleDateLabel(s.date)}</td>
-                <td>{s.customer || 'Consumidor final'}</td>
+                <td>{s.isShipping && <span title="Envío">🚚 </span>}{s.customer || 'Consumidor final'}</td>
                 <td className="font-semibold">{fmt(s.total)}</td>
                 <td className="text-[12px] text-[#b45309] whitespace-nowrap">{s.exchangeRate ? 'Bs ' + s.exchangeRate.toLocaleString('es-VE') : '—'}</td>
                 <td className="font-semibold text-[#b45309] whitespace-nowrap">{s.exchangeRate ? 'Bs ' + Math.round(s.totalBs || s.total * s.exchangeRate).toLocaleString('es-VE') : '—'}</td>

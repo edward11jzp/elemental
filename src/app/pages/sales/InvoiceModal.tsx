@@ -1,6 +1,6 @@
 import { toast } from 'sonner';
 import { Btn, Modal } from '../../components/admin/ui';
-import { docLabel, fmt, setSaleDate, todayVe, veDay } from '../../lib/sales';
+import { docLabel, fmt, setSaleDate, setSaleShipping, todayVe, veDay } from '../../lib/sales';
 import { invoiceHtml, printInvoice, printTicket } from '../../lib/salesPrint';
 import type { SalesCtx } from '../AdminSales';
 
@@ -30,6 +30,16 @@ export default function InvoiceModal({ ctx, saleId, onClose }: { ctx: SalesCtx; 
       await setSaleDate(s.id, nueva.trim());
       await ctx.reloadSales();
       toast.success('Fecha actualizada: ' + nueva.trim());
+    } catch (e: any) {
+      toast.error(e.message);
+    }
+  };
+
+  const toggleEnvio = async (on: boolean) => {
+    try {
+      await setSaleShipping(s.id, on);
+      await ctx.reloadSales();
+      toast.success(on ? '🚚 Marcada como envío' : 'Ya no es envío');
     } catch (e: any) {
       toast.error(e.message);
     }
@@ -67,6 +77,12 @@ export default function InvoiceModal({ ctx, saleId, onClose }: { ctx: SalesCtx; 
           </>
         )}
         <Row k="Facturó" v={s.userName || '—'} />
+        {s.doc !== 'cotizacion' && (
+          <label className="flex items-center gap-2 pt-1 cursor-pointer">
+            <input type="checkbox" checked={s.isShipping} onChange={(e) => toggleEnvio(e.target.checked)} />
+            <span className="font-medium">🚚 Es un envío</span>
+          </label>
+        )}
         {s.voidInfo && <Row k="Anulada" v={`${s.voidInfo.user} · ${s.voidInfo.reason}`} color="#dc2626" />}
       </div>
     </Modal>

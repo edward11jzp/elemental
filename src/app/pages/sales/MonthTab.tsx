@@ -31,6 +31,8 @@ interface Bloque {
   cobrado: number;
   neto: number;
   netoAcum: number;
+  envios: number;
+  enviosMonto: number;
 }
 
 /** Lo que entró al banco por una venta, por día: abonos o, si no los hay, el total al venderse. */
@@ -56,7 +58,8 @@ export default function MonthTab({ allSales }: { allSales: Sale[] }) {
   const bloques = useMemo(() => {
     const valid = allSales.filter(isValidSale);
     const sedeDe = (s: Sale) => s.locationId ?? SIN;
-    const ids = [...sedes.map((s) => s.id), SIN];
+    // Sedes activas más cualquier otra que tenga ventas (p. ej. una ya desactivada).
+    const ids = [...new Set([...sedes.map((s) => s.id), ...valid.map((s) => s.locationId).filter((x): x is string => !!x), SIN])];
 
     // Peso de ventas por mes, para repartir los generales de cada mes (también en el acumulado).
     const pesoCache = new Map<string, Map<string, number>>();
@@ -74,6 +77,7 @@ export default function MonthTab({ allSales }: { allSales: Sale[] }) {
     const out: Bloque[] = ids.map((id) => {
       const delMes = valid.filter((s) => sedeDe(s) === id && veDay(s.date).startsWith(mes));
       const ventas = delMes.reduce((a, s) => a + s.total, 0);
+      const envios = delMes.filter((s) => s.isShipping);
       const prod = new Map<string, { unidades: number; valor: number }>();
       delMes.forEach((s) => s.items.forEach((i) => {
         const p = prod.get(i.name) ?? { unidades: 0, valor: 0 };
@@ -124,14 +128,16 @@ export default function MonthTab({ allSales }: { allSales: Sale[] }) {
         cobrado: r2(cobrado),
         neto: r2(cobrado - totalGastos),
         netoAcum: r2(cobradoAcum - netoGastoAcum),
+        envios: envios.length,
+        enviosMonto: r2(envios.reduce((a, s) => a + s.total, 0)),
       };
     });
-    return out.filter((b) => b.id !== SIN || b.ventas || b.totalGastos || b.netoAcum);
+    return out.filter((b) => sedes.some((x) => x.id === b.id) || b.ventas || b.totalGastos || b.netoAcum);
   }, [allSales, expenses, sedes, mes, nameOf]);
 
   const tot = bloques.reduce(
-    (a, b) => ({ ventas: a.ventas + b.ventas, costo: a.costo + b.costo, gastos: a.gastos + b.totalGastos, neto: a.neto + b.neto, acum: a.acum + b.netoAcum }),
-    { ventas: 0, costo: 0, gastos: 0, neto: 0, acum: 0 },
+    (a, b) => ({ ventas: a.ventas + b.ventas, costo: a.costo + b.costo, gastos: a.gastos + b.totalGastos, neto: a.neto + b.neto, acum: a.acum + b.netoAcum, envios: a.envios + b.envios, enviosMonto: a.enviosMonto + b.enviosMonto }),
+    { ventas: 0, costo: 0, gastos: 0, neto: 0, acum: 0, envios: 0, enviosMonto: 0 },
   );
   const utilTot = tot.ventas - tot.costo - tot.gastos;
 
@@ -139,9 +145,9 @@ export default function MonthTab({ allSales }: { allSales: Sale[] }) {
     const td = (v: string | number, b = false) => `<td${b ? ' style="font-weight:bold"' : ''}>${typeof v === 'number' ? String(r2(v)).replace('.', ',') : v}</td>`;
     const tr = (...c: string[]) => `<tr>${c.join('')}</tr>`;
     let h = `<h2>CIERRE ${mes} · TODAS LAS SEDES</h2><table border="1">`;
-    h += tr(td('SEDE', true), td('VENTAS', true), td('COSTO', true), td('GASTOS', true), td('INGRESOS', true), td('RENTABILIDAD %', true), td('COBRADO', true), td('NETO MES', true), td('SALDO ACUMULADO', true));
-    bloques.forEach((b) => (h += tr(td(b.nombre), td(b.ventas), td(b.costo), td(b.totalGastos), td(b.utilidad), td(b.rentabilidad), td(b.cobrado), td(b.neto), td(b.netoAcum))));
-    h += tr(td('TOTAL', true), td(tot.ventas, true), td(tot.costo, true), td(tot.gastos, true), td(utilTot, true), td(tot.ventas ? 100 - ((tot.costo + tot.gastos) * 100) / tot.ventas : 0, true), td(''), td(tot.neto, true), td(tot.acum, true));
+    h += tr(td('SEDE', true), td('VENTAS', true), td('COSTO', true), td('GASTOS', true), td('INGRESOS', true), td('RENTABILIDAD %', true), td('COBRADO', true), td('NETO MES', true), td('SALDO ACUMULADO', true), td('ENVIOS', true), td('VENTAS POR ENVIO', true));
+    bloques.forEach((b) => (h += tr(td(b.nombre), td(b.ventas), td(b.costo), td(b.totalGastos), td(b.utilidad), td(b.rentabilidad), td(b.cobrado), td(b.neto), td(b.netoAcum), td(b.envios), td(b.enviosMonto))));
+    h += tr(td('TOTAL', true), td(tot.ventas, true), td(tot.costo, true), td(tot.gastos, true), td(utilTot, true), td(tot.ventas ? 100 - ((tot.costo + tot.gastos) * 100) / tot.ventas : 0, true), td(''), td(tot.neto, true), td(tot.acum, true), td(tot.envios, true), td(tot.enviosMonto, true));
     h += '</table>';
     bloques.forEach((b) => {
       h += `<br><h3>${b.nombre}</h3><table border="1">`;
@@ -149,7 +155,7 @@ export default function MonthTab({ allSales }: { allSales: Sale[] }) {
       h += tr(td('PRODUCTOS', true), td('COSTO UNITARIO', true), td('UNIDADES', true), td('VALOR', true), '<td></td>', td('GASTOS', true), td('VALOR', true), '<td></td>', td('INGRESOS', true), td(b.utilidad, true));
       const lado = [
         ['INGRESOS GASTADOS %', b.pctGastado], ['RENTABILIDAD %', b.rentabilidad], ['VENTAS TOTALES', b.ventas],
-        ['GASTOS Y COSTOS TOTALES', b.costo + b.totalGastos], ['COBRADO EN EL MES', b.cobrado], ['NETO DEL MES', b.neto], ['SALDO ACUMULADO', b.netoAcum],
+        ['GASTOS Y COSTOS TOTALES', b.costo + b.totalGastos], ['COBRADO EN EL MES', b.cobrado], ['NETO DEL MES', b.neto], ['SALDO ACUMULADO', b.netoAcum], ['ENVIOS (CANTIDAD)', b.envios], ['VENTAS POR ENVIO', b.enviosMonto],
       ] as [string, number][];
       for (let i = 0; i < Math.max(filas, lado.length); i++) {
         const p = b.productos[i], g = b.gastos[i], l = lado[i];
@@ -184,6 +190,32 @@ export default function MonthTab({ allSales }: { allSales: Sale[] }) {
         <Stat label="Ingresos" value={fmt(utilTot)} sub={tot.ventas ? 'rentabilidad ' + pct((utilTot * 100) / tot.ventas) : undefined} color={utilTot >= 0 ? '#15803d' : '#dc2626'} />
         <Stat label="En las cuentas (acumulado)" value={fmt(tot.acum)} sub="cobrado − gastos, todas las sedes" />
       </div>
+
+      <Card className="p-4 overflow-x-auto">
+        <h3 className="text-[14px] font-semibold mb-1">🚚 Ventas por envío</h3>
+        <p className="text-[11px] text-[#6b7280] mb-3">Ventas del mes marcadas como envío en cada sede.</p>
+        <table className="w-full text-[13px]">
+          <thead className="text-[11px] text-[#6b7280] text-left">
+            <tr><th className="py-1">Sede</th><th className="text-right">Envíos</th><th className="text-right">Monto</th><th className="text-right">% de sus ventas</th></tr>
+          </thead>
+          <tbody>
+            {bloques.map((b) => (
+              <tr key={b.id} className="border-t border-[#f1f1f3]">
+                <td className="py-1.5 font-medium">{b.nombre}</td>
+                <td className="text-right">{b.envios}</td>
+                <td className="text-right">{fmt(b.enviosMonto)}</td>
+                <td className="text-right">{b.ventas ? pct((b.enviosMonto * 100) / b.ventas) : '—'}</td>
+              </tr>
+            ))}
+            <tr className="border-t border-[#e6e6e9] font-semibold">
+              <td className="py-1.5">Total</td>
+              <td className="text-right">{tot.envios}</td>
+              <td className="text-right">{fmt(tot.enviosMonto)}</td>
+              <td className="text-right">{tot.ventas ? pct((tot.enviosMonto * 100) / tot.ventas) : '—'}</td>
+            </tr>
+          </tbody>
+        </table>
+      </Card>
 
       <Card className="p-4 overflow-x-auto">
         <h3 className="text-[14px] font-semibold mb-1">¿De quién es el dinero de la cuenta?</h3>

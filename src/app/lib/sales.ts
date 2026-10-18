@@ -42,6 +42,8 @@ export interface Sale {
   userName: string;
   locationId: string | null;
   locationName: string;
+  /** La venta es un envío (marcado por la tienda). */
+  isShipping: boolean;
   customerId: string | null;
   customer: string;
   email: string;
@@ -87,6 +89,7 @@ function rowToSale(r: any): Sale {
     userName: r.user_name ?? '',
     locationId: r.location_id ?? null,
     locationName: r.location_name ?? '',
+    isShipping: !!r.is_shipping,
     customerId: r.customer_id ?? null,
     customer: r.customer ?? '',
     email: r.email ?? '',
@@ -140,6 +143,7 @@ export interface NewSale {
   confirmOverLimit?: boolean;
   initialAbono?: number;
   encargo?: boolean;
+  shipping?: boolean;
 }
 
 export async function createSale(s: NewSale): Promise<Sale> {
@@ -157,6 +161,11 @@ export async function setSaleDate(id: string, date: string): Promise<string> {
   const { data, error } = await supabase.rpc('set_sale_date', { p_id: id, p_date: date });
   if (error) throw new Error(error.message);
   return data as string;
+}
+
+export async function setSaleShipping(id: string, on: boolean) {
+  const { error } = await supabase.rpc('set_sale_shipping', { p_id: id, p_on: on });
+  if (error) throw new Error(error.message);
 }
 
 export async function voidSale(id: string, reason: string) {

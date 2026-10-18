@@ -70,7 +70,8 @@ export function SedesProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const value = useMemo<SedesCtx>(() => ({
-    sedes, ready, mySede, reload,
+    // Las sedes desactivadas no salen en selectores, pero su nombre se sigue viendo en el historial.
+    sedes: sedes.filter((s) => s.active), ready, mySede, reload,
     sede: isManager ? sede : mySede,
     setSede: isManager ? setSede : () => {},
     nameOf: (id) => (id ? sedes.find((s) => s.id === id)?.code ?? '—' : '—'),

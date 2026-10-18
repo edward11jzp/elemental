@@ -103,6 +103,7 @@ export default function PosTab({ ctx }: { ctx: SalesCtx }) {
   const [date, setDate] = useState(todayVe());
   const [busy, setBusy] = useState(false);
   const [encargo, setEncargo] = useState(false);
+  const [envio, setEnvio] = useState(false);
   const [showDocHelp, setShowDocHelp] = useState(false);
   const [bnMsg, setBnMsg] = useState<{ text: string; color: string } | null>(null);
   // Venta al personal: a crédito (paga con abonos), con abono inicial opcional.
@@ -375,6 +376,7 @@ export default function PosTab({ ctx }: { ctx: SalesCtx }) {
         email: customer?.email ?? '',
         items: lines.map((l) => ({ id: l.id, free: !!l.free, name: l.name, size: l.size ?? null, color: l.color || null, qty: l.qty, price: l.price, cost: l.cost, deliverNow: l.free ? l.qty : (l.entregar ?? 0) })),
         encargo,
+        shipping: envio,
         discount: disc,
         taxRate: taxR,
         pay: aCredito ? ('pendiente' as const) : pay,
@@ -409,6 +411,7 @@ export default function PosTab({ ctx }: { ctx: SalesCtx }) {
       setIniAmt(''); setIniBs(''); setIniBsTouched(false);
       setLines([]);
       setEncargo(false);
+      setEnvio(false);
       setDiscount('0');
       setNotes('');
       await ctx.reloadSales();
@@ -690,6 +693,12 @@ export default function PosTab({ ctx }: { ctx: SalesCtx }) {
             {factorN > 0 && <div className="text-right text-[12px] text-[#15803d]">≈ $ real: {fmt(Math.round(total * factorN * 100) / 100)} (factor {factorN})</div>}
           </div>
 
+          {doc !== 'cotizacion' && (
+            <label className="flex items-center gap-2 rounded-lg border border-[#e6e6e9] p-2.5 text-[13px] cursor-pointer">
+              <input type="checkbox" checked={envio} onChange={(e) => setEnvio(e.target.checked)} />
+              <b>🚚 Es un envío</b>
+            </label>
+          )}
           {doc !== 'cotizacion' && (
             <label className="flex items-start gap-2 rounded-lg border border-[#e6e6e9] p-2.5 text-[13px] cursor-pointer">
               <input type="checkbox" className="mt-0.5" checked={encargo} onChange={(e) => toggleEncargo(e.target.checked)} />
