@@ -68,3 +68,33 @@ begin
   return v_id;
 end $$;
 grant execute on function public.push_transfer(uuid, uuid, int, text, text, text, uuid) to authenticated;
+
+-- Aprobar al final: la gerente revisa todo traslado que llego, completo o no.
+-- (Va aqui tambien para que este archivo baste solo, se haya corrido o no la fase 18.)
+create or replace function public.review_transfer(p_id bigint, p_devolver boolean, p_note text default '') returns void
+language plpgsql security definer set search_path = public as $$
+declare r public.transfer_requests; v_falta int;
+begin
+  if not public.is_manager() then raise exception 'Solo la gerente o el administrador aprueban traslados'; end if;
+  select * into r from public.transfer_requests where id = p_id for update;
+  if not found then raise exception 'Ese traslado ya no existe'; end if;
+  if r.status not in ('recibido', 'con_diferencia') then raise exception 'Ese traslado no esta esperando aprobacion'; end if;
+  v_falta := r.qty - coalesce(r.qty_received, r.qty);
+  if p_devolver and v_falta > 0 then
+    perform public.bump_stock(r.product_id, r.from_location, v_falta, r.size, r.color);
+    insert into public.inventory_movements (type, product_id, product_name, qty, reason, user_name, location_id, size, color)
+      values ('in', r.product_id, r.product_name, v_falta, 'Faltante de traslado devuelto', public.my_name(), r.from_location, r.size, r.color);
+  end if;
+  update public.transfer_requests
+     set status = 'revisado', reviewed_by = public.my_name(), updated_at = now(),
+         review_note = left(coalesce(p_note, '') ||
+                            case when v_falta <= 0 then ''
+                                 when p_devolver then ' [faltante devuelto al origen]'
+                                 else ' [faltante dado por perdido]' end, 300)
+   where id = p_id;
+  if v_falta > 0 then
+    perform public.audit('Cerro traslado con faltante: ' || v_falta || ' ' || r.product_name
+                         || case when p_devolver then ' devueltas al origen' else ' perdidas' end);
+  end if;
+end $$;
+grant execute on function public.review_transfer(bigint, boolean, text) to authenticated;

@@ -1,7 +1,7 @@
 // Traslados entre tiendas.
-//   Pedido: una tienda pide -> la otra envía -> la primera confirma -> gerente cierra.
-//   Envío:  una tienda envía ->                 la otra confirma    -> gerente cierra.
-// Al confirmar se dice cuántas piezas llegaron; al cerrar, la gerente decide qué pasa con lo que falte.
+//   Pedido: una tienda pide -> la otra envía -> la primera confirma -> gerente aprueba.
+//   Envío:  una tienda envía ->                 la otra confirma    -> gerente aprueba.
+// Al confirmar se dice cuántas piezas llegaron; al aprobar, la gerente decide qué pasa con lo que falte.
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { toast } from 'sonner';
 import { useApp } from '../context';
@@ -14,7 +14,7 @@ import {
   recibirTraslado, revisarTraslado, type EstadoTraslado, type Traslado,
 } from '../lib/transfers';
 
-type Pestana = 'enviar' | 'camino' | 'cerrar' | 'historial';
+type Pestana = 'enviar' | 'camino' | 'aprobar' | 'historial';
 
 const COLOR: Record<EstadoTraslado, string> = {
   pedido: '#ca8a04',
@@ -30,9 +30,9 @@ const ETIQUETA: Record<EstadoTraslado, string> = {
   pedido: 'Esperando aprobación',
   aprobado: 'Por enviar',
   enviado: 'En camino',
-  recibido: 'Llegó completo · por cerrar',
-  con_diferencia: 'Llegó incompleto · por cerrar',
-  revisado: 'Cerrado',
+  recibido: 'Llegó completo · por aprobar',
+  con_diferencia: 'Llegó incompleto · por aprobar',
+  revisado: 'Aprobado',
   rechazado: 'Rechazado',
   cancelado: 'Cancelado',
 };
@@ -61,12 +61,12 @@ export default function AdminTransfers() {
   const cuentas = {
     enviar: por(['pedido', 'aprobado']).length,
     camino: por(['enviado']).length,
-    cerrar: por(['recibido', 'con_diferencia']).length,
+    aprobar: por(['recibido', 'con_diferencia']).length,
   };
   const mostrados = useMemo(() => {
     if (tab === 'enviar') return por(['pedido', 'aprobado']);
     if (tab === 'camino') return por(['enviado']);
-    if (tab === 'cerrar') return por(['recibido', 'con_diferencia']);
+    if (tab === 'aprobar') return por(['recibido', 'con_diferencia']);
     return por(['revisado', 'rechazado', 'cancelado']);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [lista, tab]);
@@ -97,13 +97,13 @@ export default function AdminTransfers() {
         : `Se darán por perdidas ${falta} piezas. ¿Qué pasó?`,
     );
     if (nota === null) return;
-    hacer(() => revisarTraslado(t.id, devolver, nota), devolver ? 'Faltante devuelto al origen' : 'Faltante dado por perdido');
+    hacer(() => revisarTraslado(t.id, devolver, nota), devolver ? 'Aprobado · faltante devuelto al origen' : 'Aprobado · faltante dado por perdido');
   };
 
   const opciones = [
     { key: 'enviar' as const, label: `Por enviar${cuentas.enviar ? ` (${cuentas.enviar})` : ''}` },
     { key: 'camino' as const, label: `En camino${cuentas.camino ? ` (${cuentas.camino})` : ''}` },
-    ...(isManager ? [{ key: 'cerrar' as const, label: `Por cerrar${cuentas.cerrar ? ` (${cuentas.cerrar})` : ''}` }] : []),
+    ...(isManager ? [{ key: 'aprobar' as const, label: `Por aprobar${cuentas.aprobar ? ` (${cuentas.aprobar})` : ''}` }] : []),
     { key: 'historial' as const, label: 'Historial' },
   ];
 
@@ -114,7 +114,7 @@ export default function AdminTransfers() {
           <h2 className="text-[18px] font-bold">Traslados entre tiendas</h2>
           <p className="text-[12px] text-[#6b7280] max-w-[640px]">
             Pide lo que no tienes o envía lo que te sobra. La mercancía sale al enviarse y entra al
-            confirmar la llegada; mientras viaja no cuenta en ninguna tienda. La gerente cierra cada
+            confirmar la llegada; mientras viaja no cuenta en ninguna tienda. La gerente aprueba cada
             traslado cuando llega.
           </p>
         </div>
@@ -187,10 +187,10 @@ export default function AdminTransfers() {
                   <span className="text-[12px] text-[#6b7280]">Esperando que {nameOf(t.to)} confirme que llegó.</span>
                 )}
                 {t.status === 'recibido' && isManager && (
-                  <Btn onClick={() => hacer(() => revisarTraslado(t.id, false, ''), 'Traslado cerrado')}>✓ Cerrar</Btn>
+                  <Btn onClick={() => hacer(() => revisarTraslado(t.id, false, ''), 'Traslado aprobado')}>✓ Aprobar</Btn>
                 )}
                 {(t.status === 'recibido' || t.status === 'con_diferencia') && !isManager && (
-                  <span className="text-[12px] text-[#6b7280]">Esperando que la gerente lo cierre.</span>
+                  <span className="text-[12px] text-[#6b7280]">Esperando que la gerente lo apruebe.</span>
                 )}
                 {t.status === 'con_diferencia' && isManager && (
                   <>
@@ -209,8 +209,8 @@ export default function AdminTransfers() {
               {
                 enviar: 'No hay pedidos por enviar.',
                 camino: 'No hay nada en camino.',
-                cerrar: 'No hay traslados por cerrar.',
-                historial: 'Todavía no hay traslados cerrados.',
+                aprobar: 'No hay traslados por aprobar.',
+                historial: 'Todavía no hay traslados aprobados.',
               }[tab]
             }
           </Card>
