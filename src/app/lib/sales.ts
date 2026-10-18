@@ -31,6 +31,8 @@ export interface SaleItem {
   qty: number;
   price: number;
   cost?: number;
+  /** Venta por encargo: cuántas se entregan en el momento. */
+  deliverNow?: number;
 }
 
 export interface Sale {
@@ -137,6 +139,7 @@ export interface NewSale {
   credit?: boolean;
   confirmOverLimit?: boolean;
   initialAbono?: number;
+  encargo?: boolean;
 }
 
 export async function createSale(s: NewSale): Promise<Sale> {
@@ -202,4 +205,36 @@ export async function addSalePayment(saleId: string, p: { amount: number; method
 export async function deleteSalePayment(id: string) {
   const { error } = await supabase.rpc('delete_sale_payment', { p_id: id });
   if (error) throw new Error(error.message);
+}
+
+/* ---------- Venta por encargo ---------- */
+export interface Pending {
+  id: number;
+  saleId: string;
+  productId: string;
+  productName: string;
+  size: string;
+  color: string;
+  ordered: number;
+  delivered: number;
+  locationId: string | null;
+  createdAt: string;
+}
+
+/** Lo que se le debe entregar a clientes (solo lo que falta). */
+export async function listPending(): Promise<Pending[]> {
+  const { data, error } = await supabase.from('sale_pending').select('*').order('created_at');
+  if (error) throw new Error(error.message);
+  return (data ?? [])
+    .map((r: any) => ({
+      id: r.id, saleId: r.sale_id, productId: r.product_id, productName: r.product_name, size: r.size, color: r.color,
+      ordered: r.qty_ordered, delivered: r.qty_delivered, locationId: r.location_id, createdAt: r.created_at,
+    }))
+    .filter((p) => p.delivered < p.ordered);
+}
+
+export async function deliverPending(id: number, qty: number): Promise<number> {
+  const { data, error } = await supabase.rpc('deliver_pending', { p_id: id, p_qty: qty });
+  if (error) throw new Error(error.message);
+  return data as number;
 }

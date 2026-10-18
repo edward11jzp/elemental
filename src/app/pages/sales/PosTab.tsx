@@ -25,6 +25,8 @@ interface Line {
   price: number;
   cost?: number;
   stock: number;
+  /** Por encargo: cuántas se entregan hoy (el resto queda pendiente). */
+  entregar?: number;
 }
 
 type Mode = 'detal' | 'mayor';
@@ -97,6 +99,7 @@ export default function PosTab({ ctx }: { ctx: SalesCtx }) {
   const [payCur, setPayCur] = useState<'USD' | 'BS'>('USD');
   const [date, setDate] = useState(todayVe());
   const [busy, setBusy] = useState(false);
+  const [encargo, setEncargo] = useState(false);
   const [showDocHelp, setShowDocHelp] = useState(false);
   const [bnMsg, setBnMsg] = useState<{ text: string; color: string } | null>(null);
   // Venta al personal: a crédito (paga con abonos), con abono inicial opcional.
@@ -172,7 +175,7 @@ export default function PosTab({ ctx }: { ctx: SalesCtx }) {
   };
 
   const addProduct = (p: Product) => {
-    if (stockOf(p.id) <= 0) return;
+    if (stockOf(p.id) <= 0 && !encargo) return;
     const conStock = filasDe(p.id);
     const size = conStock[0]?.size ?? p.sizes?.[0] ?? '';
     const color = conStock.find((r) => r.size === size)?.color ?? '';
@@ -180,7 +183,7 @@ export default function PosTab({ ctx }: { ctx: SalesCtx }) {
     setLines((prev) => {
       const ex = prev.find((l) => l.key === key);
       const inSale = prev.filter((l) => l.id === p.id).reduce((a, l) => a + l.qty, 0);
-      if (inSale >= stockOf(p.id)) {
+      if (!encargo && inSale >= stockOf(p.id)) {
         toast.error('Stock máximo en ' + (nameOf(vendeEn) || 'tu sede') + ': ' + stockOf(p.id));
         return prev;
       }
@@ -213,7 +216,7 @@ export default function PosTab({ ctx }: { ctx: SalesCtx }) {
       if (patch.qty !== undefined) {
         let qn = Math.floor(Number(patch.qty));
         if (!qn || qn < 1) qn = 1;
-        if (!l.free) {
+        if (!l.free && !encargo) {
           const others = prev.filter((x) => x.id === l.id && x.key !== key).reduce((a, x) => a + x.qty, 0);
           const max = Math.max(1, l.stock - others);
           if (qn > max) {
@@ -223,6 +226,7 @@ export default function PosTab({ ctx }: { ctx: SalesCtx }) {
         }
         next.qty = qn;
       }
+      if (encargo && !l.free) next.entregar = Math.max(0, Math.min(Math.floor(Number(next.entregar) || 0), next.qty, next.stock));
       next.key = l.free ? l.key : `${l.id}|${next.size ?? ''}|${next.color ?? ''}`;
       // Si al cambiar talla/color coincide con otra línea, se unen.
       const dup = prev.find((x) => x.key === next.key && x.key !== key);
@@ -343,6 +347,16 @@ export default function PosTab({ ctx }: { ctx: SalesCtx }) {
     }
   };
 
+  const toggleEncargo = (on: boolean) => {
+    setEncargo(on);
+    if (!on) {
+      // Sin encargo no se puede vender más de lo que hay.
+      setLines((prev) => prev
+        .map((l) => (l.free ? l : { ...l, qty: Math.min(l.qty, l.stock), entregar: undefined }))
+        .filter((l) => l.qty > 0));
+    }
+  };
+
   /* ---------- Completar venta ---------- */
   const complete = async () => {
     if (!lines.length) return toast.error('Agrega al menos un producto');
@@ -356,7 +370,8 @@ export default function PosTab({ ctx }: { ctx: SalesCtx }) {
         customerId: customer?.id ?? null,
         customer: customer?.name ?? '',
         email: customer?.email ?? '',
-        items: lines.map((l) => ({ id: l.id, free: !!l.free, name: l.name, size: l.size ?? null, color: l.color || null, qty: l.qty, price: l.price, cost: l.cost })),
+        items: lines.map((l) => ({ id: l.id, free: !!l.free, name: l.name, size: l.size ?? null, color: l.color || null, qty: l.qty, price: l.price, cost: l.cost, deliverNow: l.free ? l.qty : (l.entregar ?? 0) })),
+        encargo,
         discount: disc,
         taxRate: taxR,
         pay: aCredito ? ('pendiente' as const) : pay,
@@ -390,6 +405,7 @@ export default function PosTab({ ctx }: { ctx: SalesCtx }) {
       }
       setIniAmt(''); setIniBs(''); setIniBsTouched(false);
       setLines([]);
+      setEncargo(false);
       setDiscount('0');
       setNotes('');
       await ctx.reloadSales();
@@ -483,7 +499,7 @@ export default function PosTab({ ctx }: { ctx: SalesCtx }) {
               const left = stockOf(p.id) - inSaleQty(p.id);
               const out = stockOf(p.id) <= 0;
               return (
-                <Card key={p.id} className={cx('p-3 transition-colors', out ? 'opacity-40' : 'cursor-pointer hover:border-[#a1a1aa]')} onClick={() => !out && addProduct(p)}>
+                <Card key={p.id} className={cx('p-3 transition-colors', out ? 'opacity-40' : 'cursor-pointer hover:border-[#a1a1aa]')} onClick={() => (!out || encargo) && addProduct(p)}>
                   {p.image ? (
                     <img src={p.image} alt={p.name} className="w-full aspect-square rounded-lg object-cover bg-[#f1f1f3]" loading="lazy" />
                   ) : (
@@ -635,6 +651,21 @@ export default function PosTab({ ctx }: { ctx: SalesCtx }) {
                     <QtyBtn onClick={() => updateLine(l.key, { qty: l.qty + 1 })}>+</QtyBtn>
                   </div>
                 </div>
+                {encargo && !l.free && (
+                  <div className="flex items-center gap-2 mt-1.5 text-[12px] text-[#6b7280]">
+                    <span>📦 Entregar hoy</span>
+                    <input
+                      type="number"
+                      min={0}
+                      inputMode="numeric"
+                      value={l.entregar ?? 0}
+                      onFocus={(e) => e.target.select()}
+                      onChange={(e) => updateLine(l.key, { entregar: Number(e.target.value) })}
+                      className="w-14 rounded-md border border-[#e6e6e9] bg-[#fff] py-0.5 text-center text-[12px] text-[#111]"
+                    />
+                    <span>de {Math.min(l.qty, l.stock)} disponibles · queda pendiente <b className="text-[#b45309]">{l.qty - (l.entregar ?? 0)}</b></span>
+                  </div>
+                )}
               </div>
             ))}
           </div>
@@ -656,11 +687,21 @@ export default function PosTab({ ctx }: { ctx: SalesCtx }) {
             {factorN > 0 && <div className="text-right text-[12px] text-[#15803d]">≈ $ real: {fmt(Math.round(total * factorN * 100) / 100)} (factor {factorN})</div>}
           </div>
 
+          {doc !== 'cotizacion' && (
+            <label className="flex items-start gap-2 rounded-lg border border-[#e6e6e9] p-2.5 text-[13px] cursor-pointer">
+              <input type="checkbox" className="mt-0.5" checked={encargo} onChange={(e) => toggleEncargo(e.target.checked)} />
+              <span>
+                <b>📦 Venta por encargo</b>
+                <span className="block text-[11px] text-[#6b7280]">El cliente paga hoy y se le entrega después. Solo sale del inventario lo que entregues hoy; el resto queda en Encargos.</span>
+              </span>
+            </label>
+          )}
+
           <Textarea rows={2} placeholder="Notas de la venta…" value={notes} onChange={(e) => setNotes(e.target.value)} />
 
           <div className="grid grid-cols-2 gap-2">
             <div className="relative flex gap-1">
-              <Select value={doc} onChange={(e) => setDoc(e.target.value as DocType)}>
+              <Select value={doc} onChange={(e) => { setDoc(e.target.value as DocType); if (e.target.value === 'cotizacion') toggleEncargo(false); }}>
                 {DOC_TYPES.filter((d) => d.key === 'nota_entrega' || d.key === 'cotizacion').map((d) => (
                   <option key={d.key} value={d.key}>{d.label}</option>
                 ))}
