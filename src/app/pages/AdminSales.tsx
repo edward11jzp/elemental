@@ -18,6 +18,7 @@ import CloseTab from './sales/CloseTab';
 import ReportsTab from './sales/ReportsTab';
 import AccountingTab from './sales/AccountingTab';
 import EncargosTab from './sales/EncargosTab';
+import MonthTab from './sales/MonthTab';
 import InvoiceModal from './sales/InvoiceModal';
 import { bySede, useSedes } from '../lib/sedes';
 
@@ -33,7 +34,7 @@ export interface SalesCtx {
   openInvoice: (id: string) => void;
 }
 
-type Tab = 'pos' | 'docs' | 'encargos' | 'reports' | 'close' | 'accounting';
+type Tab = 'pos' | 'docs' | 'encargos' | 'reports' | 'close' | 'month' | 'accounting';
 
 // Hora de Venezuela (UTC-4).
 const veHour = () => new Date(Date.now() - 4 * 3600e3).getUTCHours();
@@ -118,6 +119,7 @@ export default function AdminSales() {
           { key: 'encargos', label: '📦 Encargos' },
           { key: 'reports', label: '📊 Reportes', hidden: !canCosts },
           { key: 'close', label: '🌙 Cierre del día' },
+          { key: 'month', label: '📅 Cierre de mes', hidden: !canCosts },
           { key: 'accounting', label: '📑 Contabilidad', hidden: !canCosts },
         ]}
       />
@@ -126,6 +128,7 @@ export default function AdminSales() {
       {tab === 'encargos' && <EncargosTab ctx={ctx} />}
       {tab === 'reports' && canCosts && <ReportsTab ctx={ctx} />}
       {tab === 'close' && <CloseTab ctx={ctx} />}
+      {tab === 'month' && canCosts && <MonthTab allSales={allSales} />}
       {tab === 'accounting' && canCosts && <AccountingTab ctx={ctx} />}
 
       <InvoiceModal ctx={ctx} saleId={invoiceId} onClose={() => setInvoiceId(null)} />

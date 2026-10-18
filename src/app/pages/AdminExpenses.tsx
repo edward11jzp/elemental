@@ -9,6 +9,7 @@ import {
   deleteExpense,
   EXPENSE_CATEGORIES,
   EXPENSE_TYPES,
+  expenseShare,
   expenseTotals,
   listExpenses,
   loadAdminSettings,
@@ -22,6 +23,7 @@ import {
 import { fmt, todayVe } from '../lib/sales';
 import { compressImage, parseReceipt, readReceipt } from '../lib/receiptOcr';
 import { SelfReviewBadge } from '../lib/selfReview';
+import { useSedes } from '../lib/sedes';
 
 type Tab = 'resumen' | ExpenseType;
 const tip = { borderRadius: 8, border: '1px solid #e6e6e9', fontSize: 12, background: '#fff', color: '#111' };
@@ -48,6 +50,13 @@ export default function AdminExpenses() {
     reload();
     loadAdminSettings().then((s) => setRate(s.rates.exchangeRate)).catch(() => {});
   }, [reload]);
+
+  // Con una sede elegida arriba, cada gasto cuenta solo por la parte de esa sede.
+  const { sede, nameOf } = useSedes();
+  const shown = useMemo(
+    () => (sede ? list.map((e) => ({ ...e, amount: expenseShare(e, sede) })).filter((e) => e.amount > 0) : list),
+    [list, sede],
+  );
 
   const tabType: ExpenseType = tab === 'resumen' ? 'operativo' : tab;
 
@@ -138,7 +147,8 @@ export default function AdminExpenses() {
         }}
       />
 
-      {tab === 'resumen' ? <Resumen list={list} rate={rate} /> : <TypeTab type={tab} list={list} rate={rate} onNew={() => setModal({ type: tab })} onEdit={(e) => setModal({ type: e.type, edit: e })} onDeleted={reload} />}
+      {sede && <p className="mb-3 text-[12px] text-[#6b7280]">Viendo solo lo que le toca a <b>{nameOf(sede)}</b>. Los gastos generales (sin sede) no se cuentan aquí.</p>}
+      {tab === 'resumen' ? <Resumen list={shown} rate={rate} /> : <TypeTab type={tab} list={shown} rate={rate} onNew={() => setModal({ type: tab })} onEdit={(e) => setModal({ type: e.type, edit: list.find((x) => x.id === e.id) ?? e })} onDeleted={reload} />}
 
       {modal && (
         <ExpenseModal
@@ -226,6 +236,9 @@ function TypeTab({ type, list, rate, onNew, onEdit, onDeleted }: { type: Expense
       toast.error(err.message);
     }
   };
+  const { nameOf } = useSedes();
+  const sedeLabel = (e: Expense) =>
+    e.splits?.length ? '➗ ' + e.splits.map((x) => `${nameOf(x.locationId)} ${fmt(x.amount)}`).join(' · ') : e.locationId ? '🏢 ' + nameOf(e.locationId) : 'General';
   const accLabel = (e: Expense) => {
     const a = accountByKey(e.account);
     if (!a) return '—';
@@ -245,9 +258,9 @@ function TypeTab({ type, list, rate, onNew, onEdit, onDeleted }: { type: Expense
       </div>
       <Card>
         <Table
-          head={['Fecha', 'Categoría', 'Nombre', 'Proveedor', 'Pagado desde', 'Monto', '']}
+          head={['Fecha', 'Categoría', 'Nombre', 'Proveedor', 'Sede', 'Pagado desde', 'Monto', '']}
           empty={rows.length ? false : 'Sin gastos registrados.'}
-          foot={rows.length ? <tr><td colSpan={5}>TOTAL ({rows.length})</td><td className="text-[#dc2626]">{fmt(total)}</td><td /></tr> : undefined}
+          foot={rows.length ? <tr><td colSpan={6}>TOTAL ({rows.length})</td><td className="text-[#dc2626]">{fmt(total)}</td><td /></tr> : undefined}
         >
           {rows.map((e) => (
             <tr key={e.id}>
@@ -255,8 +268,13 @@ function TypeTab({ type, list, rate, onNew, onEdit, onDeleted }: { type: Expense
               <td><span className="rounded-md border border-[#e6e6e9] bg-[#f4f4f5] px-2 py-0.5 text-[11px] whitespace-nowrap">{e.category}</span></td>
               <td>{e.description} <SelfReviewBadge refId={String(e.id)} /></td>
               <td className="text-[#6b7280]">{e.supplier || '—'}</td>
+              <td className="text-[#6b7280] text-[12px]">{sedeLabel(e)}</td>
               <td className="text-[#6b7280] whitespace-nowrap text-[12px]">{accLabel(e)}</td>
-              <td className="font-semibold text-[#dc2626] whitespace-nowrap">{fmt(e.amount)}</td>
+              <td className="font-semibold text-[#dc2626] whitespace-nowrap">
+                {e.currency && e.currency !== 'USD' && e.originalAmount ? (
+                  <>{curSym(e.currency)} {e.originalAmount.toLocaleString('es-VE')}<div className="text-[11px] font-normal text-[#6b7280]">≈ {fmt(e.amount)}</div></>
+                ) : fmt(e.amount)}
+              </td>
               <td className="text-right whitespace-nowrap">
                 {e.receiptPath && <IconBtn title="Ver comprobante" onClick={() => openFile(e)}>📎</IconBtn>}
                 <IconBtn title="Editar" onClick={() => onEdit(e)}>✏️</IconBtn>
@@ -280,10 +298,42 @@ function ExpenseModal({ type: initialType, edit, image, rate, userName, onClose,
   const [description, setDescription] = useState(edit?.description ?? '');
   const [supplier, setSupplier] = useState(edit?.supplier ?? '');
   const [amount, setAmount] = useState(edit ? String(edit.amount) : '');
+  // Moneda del gasto: se escribe en esa moneda y se convierte a $ con la tasa.
+  const [cur, setCur] = useState<'USD' | 'BS' | 'COP'>(edit?.currency ?? 'USD');
+  const [orig, setOrig] = useState(edit?.originalAmount != null ? String(edit.originalAmount) : '');
+  const [fx, setFx] = useState(edit?.fxRate ? String(edit.fxRate) : rate ? String(rate) : '');
+  const cambiarMoneda = (c: 'USD' | 'BS' | 'COP') => {
+    setCur(c);
+    setOrig('');
+    setFx(c === 'BS' && rate ? String(rate) : '');
+    if (c !== 'USD') {
+      const a = MONEY_ACCOUNTS.find((x) => x.currency === c);
+      if (a && accountByKey(account)?.currency !== c) setAccount(a.key);
+    }
+  };
+  // En Bs o pesos, el monto en $ sale de la tasa.
+  useEffect(() => {
+    if (cur === 'USD') return;
+    const o = Number(orig) || 0, t = Number(fx) || 0;
+    setAmount(o && t ? String(Math.round((o / t) * 100) / 100) : '');
+  }, [cur, orig, fx]);
   const [date, setDate] = useState(edit?.date ?? todayVe());
   const [account, setAccount] = useState(edit?.account ?? '');
   const [accAmount, setAccAmount] = useState(edit?.accountAmount != null ? String(edit.accountAmount) : '');
   const [accTouched, setAccTouched] = useState(edit?.accountAmount != null);
+  const { sedes } = useSedes();
+  const [sedeMode, setSedeMode] = useState<'general' | 'una' | 'dividir'>(edit?.splits?.length ? 'dividir' : edit?.locationId ? 'una' : 'general');
+  const [sedeUna, setSedeUna] = useState(edit?.locationId ?? sedes[0]?.id ?? '');
+  const [parts, setParts] = useState<Record<string, string>>(() => Object.fromEntries((edit?.splits ?? []).map((x) => [x.locationId, String(x.amount)])));
+  const [unit, setUnit] = useState<'$' | '%'>('$');
+  const partsSum = Math.round(Object.values(parts).reduce((a, v) => a + (Number(v) || 0), 0) * 100) / 100;
+  const partesIguales = () => {
+    const ids = Object.keys(parts).length ? Object.keys(parts) : sedes.map((x) => x.id);
+    const amt = unit === '%' ? 100 : Number(amount) || 0;
+    const base = Math.floor((amt / ids.length) * 100) / 100;
+    const resto = Math.round((amt - base * ids.length) * 100) / 100;
+    setParts(Object.fromEntries(ids.map((id, i) => [id, String(i === 0 ? Math.round((base + resto) * 100) / 100 : base)])));
+  };
   const [busy, setBusy] = useState(false);
   const [ocr, setOcr] = useState<{ status: string; note: string; text: string } | null>(image ? { status: '📖 Leyendo la factura…', note: 'La primera vez tarda un poco más (descarga el lector).', text: '' } : null);
   const [savedReceipt, setSavedReceipt] = useState<string | null>(null);
@@ -299,10 +349,11 @@ function ExpenseModal({ type: initialType, edit, image, rate, userName, onClose,
   // Propone el monto en Bs con la tasa del día si la cuenta es en bolívares.
   useEffect(() => {
     if (!local || accTouched) return;
+    if (acc?.currency === cur && cur !== 'USD') { setAccAmount(orig); return; }
     const usd = Number(amount) || 0;
     const r = acc?.currency === 'BS' ? rate : 0;
     setAccAmount(usd && r ? String(Math.round(usd * r * 100) / 100) : '');
-  }, [amount, account, local, accTouched, rate, acc]);
+  }, [amount, account, local, accTouched, rate, acc, cur, orig]);
 
   // Comprobante ya guardado (al editar).
   useEffect(() => {
@@ -348,8 +399,20 @@ function ExpenseModal({ type: initialType, edit, image, rate, userName, onClose,
 
   const save = async () => {
     const amt = Number(amount) || 0;
+    if (cur !== 'USD' && !(Number(fx) > 0)) return toast.error(`Indica la tasa: cuántos ${curSym(cur)} por dólar`);
     if (!description.trim() || !amt) return toast.error('Completa nombre y monto');
     if (!acc && !confirm('⚠️ No elegiste "Pagado desde".\n\nEste gasto NO se descontará del saldo de ninguna cuenta.\n\n¿Continuar sin indicar de dónde salió el dinero?')) return;
+    let splits: { locationId: string; amount: number }[] = [];
+    if (sedeMode === 'dividir') {
+      if (unit === '%' && Math.abs(partsSum - 100) > 0.01) return toast.error(`Los porcentajes suman ${partsSum}% y deben sumar 100%`);
+      const factor = unit === '%' ? amt / 100 : 1;
+      splits = Object.entries(parts).map(([locationId, v]) => ({ locationId, amount: Math.round((Number(v) || 0) * factor * 100) / 100 })).filter((x) => x.amount > 0);
+      if (splits.length < 2) return toast.error('Para dividir, pon un monto en al menos dos sedes');
+      // Los centavos que se pierden al redondear los porcentajes van a la primera sede.
+      if (unit === '%') splits[0].amount = Math.round((splits[0].amount + amt - splits.reduce((a, x) => a + x.amount, 0)) * 100) / 100;
+      else if (Math.abs(partsSum - amt) > 0.01) return toast.error(`Las partes suman ${fmt(partsSum)} y el gasto es de ${fmt(amt)}`);
+    }
+    if (sedeMode === 'una' && !sedeUna) return toast.error('Elige la sede');
     let accountAmount: number | null = null;
     if (acc) {
       accountAmount = local ? Number(accAmount) : amt;
@@ -361,7 +424,7 @@ function ExpenseModal({ type: initialType, edit, image, rate, userName, onClose,
     }
     setBusy(true);
     try {
-      const saved = await saveExpense({ type, category, description: description.trim(), supplier: supplier.trim(), amount: amt, date, account: acc?.key ?? '', accountAmount }, edit?.id, userName);
+      const saved = await saveExpense({ type, category, description: description.trim(), supplier: supplier.trim(), amount: amt, date, account: acc?.key ?? '', accountAmount, splits, locationId: sedeMode === 'una' ? sedeUna : null, currency: cur, originalAmount: cur === 'USD' ? null : Number(orig) || null, fxRate: cur === 'USD' ? null : Number(fx) || null }, edit?.id, userName);
       if (image) {
         try {
           await uploadExpenseReceipt(saved.id, image);
@@ -415,9 +478,29 @@ function ExpenseModal({ type: initialType, edit, image, rate, userName, onClose,
         </div>
         <div><Label>Nombre</Label><Input value={description} onChange={(e) => setDescription(e.target.value)} placeholder="Ej: Rollo de tela algodón 30/1 negro" /></div>
         <div className="grid grid-cols-2 gap-2">
-          <div><Label>Monto ($)</Label><Input type="number" step="0.01" value={amount} onChange={(e) => setAmount(e.target.value)} /></div>
+          <div>
+            <Label>Monto</Label>
+            <div className="flex gap-1">
+              <Select value={cur} onChange={(e) => cambiarMoneda(e.target.value as 'USD' | 'BS' | 'COP')} className="!w-[72px] !px-2">
+                <option value="USD">$</option>
+                <option value="BS">Bs</option>
+                <option value="COP">COP</option>
+              </Select>
+              {cur === 'USD' ? (
+                <Input type="number" step="0.01" value={amount} onChange={(e) => setAmount(e.target.value)} />
+              ) : (
+                <Input type="number" step="0.01" value={orig} onChange={(e) => setOrig(e.target.value)} placeholder={curSym(cur)} />
+              )}
+            </div>
+          </div>
           <div><Label>Fecha</Label><Input type="date" value={date} max={todayVe()} onChange={(e) => setDate(e.target.value)} /></div>
         </div>
+        {cur !== 'USD' && (
+          <div className="grid grid-cols-2 gap-2 items-end">
+            <div><Label>Tasa ({curSym(cur)} por $1)</Label><Input type="number" step="0.01" value={fx} onChange={(e) => setFx(e.target.value)} placeholder={cur === 'COP' ? 'Ej: 4000' : ''} /></div>
+            <div className="pb-2 text-[13px] text-[#6b7280]">= <b className="text-[#111]">{fmt(Number(amount) || 0)}</b></div>
+          </div>
+        )}
         <div><Label>Proveedor / descripción</Label><Input value={supplier} onChange={(e) => setSupplier(e.target.value)} placeholder="Opcional" /></div>
         <div className="grid grid-cols-2 gap-2">
           <div className={local ? '' : 'col-span-2'}>
@@ -434,6 +517,57 @@ function ExpenseModal({ type: initialType, edit, image, rate, userName, onClose,
             </div>
           )}
         </div>
+        {sedes.length > 1 && (
+          <div className="space-y-2">
+            <Label>Sede</Label>
+            <Select value={sedeMode} onChange={(e) => { const m = e.target.value as typeof sedeMode; setSedeMode(m); if (m === 'dividir' && !Object.keys(parts).length) setParts(Object.fromEntries(sedes.map((x) => [x.id, '']))); }}>
+              <option value="general">General (de toda la empresa)</option>
+              <option value="una">De una sola sede</option>
+              <option value="dividir">➗ Dividir entre sedes</option>
+            </Select>
+            {sedeMode === 'una' && (
+              <Select value={sedeUna} onChange={(e) => setSedeUna(e.target.value)}>
+                {sedes.map((x) => <option key={x.id} value={x.id}>{x.name}</option>)}
+              </Select>
+            )}
+            {sedeMode === 'dividir' && (
+              <div className="rounded-lg border border-[#ececef] p-2 space-y-1.5">
+                {sedes.map((x) => (
+                  <label key={x.id} className="flex items-center gap-2 text-[13px]">
+                    <input
+                      type="checkbox"
+                      checked={x.id in parts}
+                      onChange={(e) => setParts((p) => { const n = { ...p }; if (e.target.checked) n[x.id] = ''; else delete n[x.id]; return n; })}
+                    />
+                    <span className="flex-1 min-w-0 truncate">{x.name}</span>
+                    {x.id in parts && (
+                      <>
+                      {unit === '%' && Number(parts[x.id]) > 0 && <span className="text-[11px] text-[#6b7280]">{fmt(Math.round((Number(amount) || 0) * Number(parts[x.id])) / 100)}</span>}
+                      <Input type="number" step="0.01" min={0} placeholder={unit} value={parts[x.id]} onChange={(e) => setParts((p) => ({ ...p, [x.id]: e.target.value }))} className="!w-28 !py-1 text-right" />
+                      </>
+                    )}
+                  </label>
+                ))}
+                <div className="flex items-center justify-between pt-1 text-[12px]">
+                  <div className="flex items-center gap-1">
+                    {(['$', '%'] as const).map((u) => (
+                      <button key={u} type="button" onClick={() => { setUnit(u); setParts((p) => Object.fromEntries(Object.keys(p).map((k) => [k, '']))); }}
+                        className={`rounded-md border px-2 py-0.5 ${unit === u ? 'border-[#111] bg-[#111] text-[#fff]' : 'border-[#e6e6e9]'}`}>{u === '$' ? 'En $' : 'En %'}</button>
+                    ))}
+                    <Btn variant="ghost" onClick={partesIguales}>Partes iguales</Btn>
+                  </div>
+                  {unit === '%' ? (
+                    <span className={Math.abs(partsSum - 100) > 0.01 ? 'text-[#dc2626]' : 'text-[#15803d]'}>Suma {partsSum}% de 100%</span>
+                  ) : (
+                    <span className={Math.abs(partsSum - (Number(amount) || 0)) > 0.01 ? 'text-[#dc2626]' : 'text-[#15803d]'}>
+                      Suma {fmt(partsSum)} de {fmt(Number(amount) || 0)}
+                    </span>
+                  )}
+                </div>
+              </div>
+            )}
+          </div>
+        )}
         <div className="flex justify-end gap-2 pt-1">
           <Btn variant="ghost" onClick={onClose}>Cancelar</Btn>
           <Btn disabled={busy} onClick={save}>{busy ? (image ? 'Guardando comprobante…' : 'Guardando…') : 'Guardar'}</Btn>

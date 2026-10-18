@@ -193,6 +193,14 @@ export interface Expense {
   periodFrom?: string | null;
   periodTo?: string | null;
   deductions?: { saleId: string; amount: number }[];
+  /** Sede del gasto (si es de una sola). */
+  locationId?: string | null;
+  /** Reparto entre varias sedes; suma el monto. */
+  splits?: { locationId: string; amount: number }[];
+  /** Moneda en que se pagó; amount siempre queda en $. */
+  currency?: 'USD' | 'BS' | 'COP';
+  originalAmount?: number | null;
+  fxRate?: number | null;
 }
 const rowToExpense = (r: any): Expense => ({
   id: r.id,
@@ -211,12 +219,24 @@ const rowToExpense = (r: any): Expense => ({
   periodFrom: r.period_from ?? null,
   periodTo: r.period_to ?? null,
   deductions: r.deductions ?? [],
+  locationId: r.location_id ?? null,
+  currency: r.currency ?? 'USD',
+  originalAmount: r.original_amount == null ? null : Number(r.original_amount),
+  fxRate: r.fx_rate == null ? null : Number(r.fx_rate),
+  splits: (r.splits ?? []).map((x: any) => ({ locationId: x.locationId, amount: Number(x.amount) || 0 })),
 });
 
 export async function listExpenses(): Promise<Expense[]> {
   const { data, error } = await supabase.from('expenses').select('*').order('date', { ascending: false }).order('created_at', { ascending: false });
   if (error) throw error;
   return (data ?? []).map(rowToExpense);
+}
+
+/** Cuánto de un gasto le toca a una sede (sin sede = el gasto completo). */
+export function expenseShare(e: Expense, sede: string): number {
+  if (!sede) return e.amount;
+  if (e.splits?.length) return e.splits.find((x) => x.locationId === sede)?.amount ?? 0;
+  return e.locationId === sede ? e.amount : 0;
 }
 
 export type ExpenseInput = Omit<Expense, 'id' | 'createdAt' | 'receiptPath' | 'createdByName'>;
@@ -229,6 +249,8 @@ const expenseToRow = (e: ExpenseInput) => ({
   date: e.date,
   account: e.account,
   account_amount: e.accountAmount,
+  ...(e.currency !== undefined ? { currency: e.currency, original_amount: e.originalAmount ?? null, fx_rate: e.fxRate ?? null } : {}),
+  ...(e.splits !== undefined ? { location_id: e.splits.length ? null : e.locationId ?? null, splits: e.splits } : {}),
   ...(e.staffId !== undefined ? { staff_id: e.staffId, period_from: e.periodFrom ?? null, period_to: e.periodTo ?? null, deductions: e.deductions ?? [] } : {}),
 });
 
