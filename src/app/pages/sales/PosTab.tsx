@@ -165,7 +165,7 @@ export default function PosTab({ ctx }: { ctx: SalesCtx }) {
     const nota = prompt('Nota para la otra tienda (opcional)') ?? '';
     try {
       await pedirTraslado(p.id, fila.locationId, cuantas, fila.size, fila.color, nota);
-      toast.success(`Pedido enviado a ${nameOf(fila.locationId)} · lo verás en Traslados`);
+      toast.success(`Pedido a ${nameOf(fila.locationId)} · espera la aprobación de la gerente en Traslados`);
     } catch (e: any) {
       toast.error(e.message);
     }
