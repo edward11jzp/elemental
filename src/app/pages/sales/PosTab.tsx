@@ -52,7 +52,9 @@ export default function PosTab({ ctx }: { ctx: SalesCtx }) {
   const stockOf = (id: string) => (vendeEn ? qtyAt(sIdx, id, vendeEn) : 0);
   // Tallas y colores con existencias en la sede, para no vender lo que no hay.
   const filasDe = (id: string) => (sIdx.get(id) ?? []).filter((r) => (!vendeEn || r.locationId === vendeEn) && r.qty > 0);
-  const tallasCon = (id: string) => [...new Set(filasDe(id).map((r) => r.size))];
+  // Por encargo se puede pedir cualquier talla o color del producto, haya o no.
+  const tallasCon = (id: string) =>
+    [...new Set([...filasDe(id).map((r) => r.size), ...(encargo ? products.find((p) => p.id === id)?.sizes ?? [] : [])])];
   // Lo que hay del producto en las demas sedes, para avisar al cliente.
   const enOtrasSedes = (id: string) =>
     (sIdx.get(id) ?? [])
@@ -63,7 +65,8 @@ export default function PosTab({ ctx }: { ctx: SalesCtx }) {
         return acc;
       }, new Map<string, number>());
   const coloresCon = (id: string, size: string) =>
-    [...new Set(filasDe(id).filter((r) => (r.size ?? '') === (size ?? '')).map((r) => r.color))];
+    [...new Set([...filasDe(id).filter((r) => (r.size ?? '') === (size ?? '')).map((r) => r.color),
+                 ...(encargo ? products.find((p) => p.id === id)?.colors ?? [] : [])])];
 
   const { products } = useApp();
   const { settings, isAdmin } = ctx;
