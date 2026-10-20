@@ -53,7 +53,7 @@ function payLines(s: Sale, rate: number): [string, string][] {
 /** HTML del documento A4 (también se muestra dentro del modal). */
 export function invoiceHtml(s: Sale, co: Company, fallbackRate: number) {
   const rate = s.exchangeRate || fallbackRate || 0;
-  const useBs = s.docCurrency === 'BS' && rate > 0;
+  const useBs = rate > 0; // Siempre en Bs cuando hay tasa.
   const r = rate || 1;
   const f = (v: number) => (useBs ? 'Bs ' + Math.round(v * r).toLocaleString('es-VE') : fmt(v));
   const totalBs = Math.round(s.totalBs || s.total * r);
@@ -131,7 +131,7 @@ const TICKET_CSS = `@page{size:80mm 297mm;margin:4mm}html,body{margin:0;padding:
 
 export function printTicket(s: Sale, co: Company, fallbackRate: number) {
   const rate = s.exchangeRate || fallbackRate || 0;
-  const useBs = s.docCurrency === 'BS' && rate > 0;
+  const useBs = rate > 0; // Siempre en Bs cuando hay tasa.
   const r = rate || 1;
   const f = (v: number) => (useBs ? 'Bs ' + Math.round(v * r).toLocaleString('es-VE') : fmt(v));
   const totalBs = Math.round(s.totalBs || s.total * r);
