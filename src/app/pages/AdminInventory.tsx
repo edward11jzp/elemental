@@ -792,8 +792,6 @@ export default function AdminInventory() {
                   {showCosts && <th className="text-left p-4">Margen</th>}
                   <th className="text-left p-4">Stock</th>
                   <th className="text-left p-4">Estado</th>
-                  <th className="text-left p-4">Ubicación</th>
-                  <th className="text-left p-4">Proveedor</th>
                   <th className="text-left p-4">Personalizado</th>
                   <th className="text-center p-4">Destacado</th>
                   <th className="text-left p-4">Acciones</th>
@@ -867,8 +865,6 @@ export default function AdminInventory() {
                         </div>
                       )}
                     </td>
-                    <td className="p-4 text-sm text-muted-foreground">{product.location || '—'}</td>
-                    <td className="p-4 text-sm text-muted-foreground">{product.supplier || '—'}</td>
                     <td className="p-4">
                       {product.allowCustom ? (
                         <span className="text-green-400">Sí</span>
@@ -1548,22 +1544,6 @@ export default function AdminInventory() {
                 </div>
 
                 <div>
-                  <Label htmlFor="edit-supplier">Proveedor</Label>
-                  <select
-                    id="edit-supplier"
-                    value={editingProduct?.supplier ?? ''}
-                    onChange={(e) => setEditingProduct({ ...editingProduct, supplier: e.target.value })}
-                    className="w-full bg-secondary border border-border rounded-md px-3 py-2 text-white"
-                  >
-                    <option value="">— Sin proveedor —</option>
-                    {suppliers.map((sp) => <option key={sp.id} value={sp.name}>{sp.name}</option>)}
-                    {editingProduct?.supplier && !suppliers.some((sp) => sp.name === editingProduct.supplier) && (
-                      <option value={editingProduct.supplier}>{editingProduct.supplier}</option>
-                    )}
-                  </select>
-                </div>
-
-                <div>
                   <Label htmlFor="edit-minStock">Stock mínimo por sede (alerta)</Label>
                   <Input
                     id="edit-minStock"
@@ -1580,16 +1560,6 @@ export default function AdminInventory() {
                   </p>
                 </div>
 
-                <div>
-                  <Label htmlFor="edit-location">Ubicación</Label>
-                  <Input
-                    id="edit-location"
-                    value={editingProduct?.location ?? ''}
-                    onChange={(e) => setEditingProduct({ ...editingProduct, location: e.target.value })}
-                    className="bg-secondary border-border text-white"
-                    placeholder="Ej: Almacén A · Estante 3"
-                  />
-                </div>
               </div>
 
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">

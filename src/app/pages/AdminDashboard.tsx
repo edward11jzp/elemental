@@ -336,7 +336,8 @@ export default function AdminDashboard() {
         <SmallStat label="VENTAS TOTALES" value={money(stats.totalSales)} valueClass="text-[#15803d]" />
         <SmallStat label="PEDIDOS TOTALES" value={String(stats.totalOrders)} valueClass="text-[#1d4ed8]" />
         <SmallStat label="INVENTARIO (UDS)" value={stats.stockUnits.toLocaleString('es-VE')} valueClass="text-[#0e7490]" />
-        <SmallStat label="VALOR INVENTARIO" value={money(stats.stockValue)} valueClass="text-[#4d7c0f]" />
+        {/* El valor del inventario no lo ve el rol de ventas. */}
+        {currentUser?.role !== 'sales' && <SmallStat label="VALOR INVENTARIO" value={money(stats.stockValue)} valueClass="text-[#4d7c0f]" />}
         <SmallStat label="PRODUCTOS AGOTADOS" value={String(stats.outOfStock)} valueClass="text-[#52525b]" />
         <SmallStat label="INVENTARIO BAJO" value={String(stats.lowStock)} valueClass="text-[#52525b]" />
         <SmallStat label="PEDIDOS PENDIENTES" value={String(stats.pending)} valueClass="text-[#7e22ce]" />

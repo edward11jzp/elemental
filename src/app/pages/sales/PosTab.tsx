@@ -32,6 +32,16 @@ interface Line {
 
 type Mode = 'detal' | 'mayor';
 
+// Tallas de menor a mayor: niños por número, luego XS … 5XL; las desconocidas al final.
+const TALLAS = ['XXS', 'XS', 'S', 'M', 'L', 'XL', '2XL', 'XXL', '3XL', 'XXXL', '4XL', 'XXXXL', '5XL'];
+const rankTalla = (t: string) => {
+  const u = (t ?? '').toUpperCase().replace(/\s+/g, '');
+  if (/^\d+$/.test(u)) return Number(u) - 1000;
+  const i = TALLAS.indexOf(u);
+  return i >= 0 ? i : 500;
+};
+const ordenTallas = (ts: string[]) => [...ts].sort((a, b) => rankTalla(a) - rankTalla(b) || a.localeCompare(b));
+
 const printsSum = (l: { prints?: PrintOpt[] }) => (l.prints ?? []).reduce((a, p) => a + p.price, 0);
 const lineKey = (l: { id?: string | null; size?: string; color?: string; prints?: PrintOpt[] }) =>
   `${l.id}|${l.size ?? ''}|${l.color ?? ''}|${(l.prints ?? []).map((p) => p.name).join('+')}`;
@@ -64,7 +74,7 @@ export default function PosTab({ ctx }: { ctx: SalesCtx }) {
   const filasDe = (id: string) => (sIdx.get(id) ?? []).filter((r) => (!vendeEn || r.locationId === vendeEn) && r.qty > 0);
   // Por encargo se puede pedir cualquier talla o color del producto, haya o no.
   const tallasCon = (id: string) =>
-    [...new Set([...filasDe(id).map((r) => r.size), ...(encargo ? products.find((p) => p.id === id)?.sizes ?? [] : [])])];
+    ordenTallas([...new Set([...filasDe(id).map((r) => r.size), ...(encargo ? products.find((p) => p.id === id)?.sizes ?? [] : [])])]);
   // Lo que hay del producto en las demas sedes, para avisar al cliente.
   const enOtrasSedes = (id: string) =>
     (sIdx.get(id) ?? [])
@@ -97,6 +107,7 @@ export default function PosTab({ ctx }: { ctx: SalesCtx }) {
   // Catálogo
   const [q, setQ] = useState('');
   const [cat, setCat] = useState('');
+  const [colorF, setColorF] = useState('');
   const [mode, setMode] = useState<Mode>('detal');
 
   // Venta
@@ -170,6 +181,8 @@ export default function PosTab({ ctx }: { ctx: SalesCtx }) {
   const list = useMemo(() => {
     return delTipo.filter((p) => {
       if (cat && p.subcategory !== cat) return false;
+      if (colorF && !(sIdx.get(p.id) ?? []).some((r) => r.color === colorF && r.qty > 0 && (!vendeEn || r.locationId === vendeEn))
+          && !(encargo && (p.colors ?? []).includes(colorF))) return false;
       if (!words.length) return true;
       const rows = sIdx.get(p.id) ?? [];
       const hay = norm([p.name, p.id, p.sku ?? '', ...Object.values(p.skuSizes ?? {}), SUBCAT_LABEL[p.subcategory] ?? p.subcategory,
@@ -177,7 +190,15 @@ export default function PosTab({ ctx }: { ctx: SalesCtx }) {
       const tallas = new Set([...(p.sizes ?? []), ...rows.map((r) => r.size)].map((t) => norm(t)));
       return words.every((w) => hay.includes(w) || tallas.has(w));
     });
-  }, [delTipo, q, cat]);
+  }, [delTipo, q, cat, colorF, sIdx, vendeEn, encargo]);
+
+  // Colores con existencias en la sede, para el filtro.
+  const coloresDisponibles = useMemo(() => {
+    const ids = new Set(delTipo.map((p) => p.id));
+    const set = new Set<string>();
+    stockRows.forEach((r) => { if (ids.has(r.productId) && r.qty > 0 && r.color && (!vendeEn || r.locationId === vendeEn)) set.add(r.color); });
+    return [...set].sort((a, b) => a.localeCompare(b));
+  }, [stockRows, delTipo, vendeEn]);
 
   const changeMode = (m: Mode) => {
     setMode(m);
@@ -215,11 +236,10 @@ export default function PosTab({ ctx }: { ctx: SalesCtx }) {
   };
 
   const addProduct = (p: Product, forced?: { size: string; color?: string }) => {
-    if (stockOf(p.id) <= 0 && !encargo) return;
     const conStock = filasDe(p.id);
     // Si se buscó una talla o un color, se elige la variante que más coincide.
     const score = (r: { size: string; color: string }) =>
-      words.filter((w) => norm(r.size) === w || (w.length >= 3 && norm(r.color).includes(w))).length;
+      (colorF && r.color === colorF ? 10 : 0) + words.filter((w) => norm(r.size) === w || (w.length >= 3 && norm(r.color).includes(w))).length;
     const mejor = forced
       ? conStock.find((r) => r.size === forced.size && (!forced.color || r.color === forced.color)) ?? { size: forced.size, color: forced.color ?? '' }
       : [...conStock].sort((a, b) => score(b) - score(a))[0];
@@ -229,10 +249,8 @@ export default function PosTab({ ctx }: { ctx: SalesCtx }) {
     setLines((prev) => {
       const ex = prev.find((l) => l.key === key);
       const inSale = prev.filter((l) => l.id === p.id).reduce((a, l) => a + l.qty, 0);
-      if (!encargo && inSale >= stockOf(p.id)) {
-        toast.error('Stock máximo en ' + (nameOf(vendeEn) || 'tu sede') + ': ' + stockOf(p.id));
-        return prev;
-      }
+      // Se puede vender sin existencias: el inventario queda en negativo. Solo se avisa.
+      if (!encargo && inSale >= stockOf(p.id)) toast.warning(`Sin existencias en ${nameOf(vendeEn) || 'tu sede'}: el inventario quedará en negativo`);
       if (ex) return prev.map((l) => (l.key === key ? { ...l, qty: l.qty + 1 } : l));
       return [
         ...prev,
@@ -264,11 +282,7 @@ export default function PosTab({ ctx }: { ctx: SalesCtx }) {
         if (!qn || qn < 1) qn = 1;
         if (!l.free && !encargo) {
           const others = prev.filter((x) => x.id === l.id && x.key !== key).reduce((a, x) => a + x.qty, 0);
-          const max = Math.max(1, l.stock - others);
-          if (qn > max) {
-            toast.error(`Sólo hay ${l.stock} en stock de ${l.name}`);
-            qn = max;
-          }
+          if (qn > Math.max(0, l.stock - others) && qn > l.qty) toast.warning(`Solo hay ${Math.max(0, l.stock)} de ${l.name}: el inventario quedará en negativo`);
         }
         next.qty = qn;
       }
@@ -397,10 +411,7 @@ export default function PosTab({ ctx }: { ctx: SalesCtx }) {
   const toggleEncargo = (on: boolean) => {
     setEncargo(on);
     if (!on) {
-      // Sin encargo no se puede vender más de lo que hay.
-      setLines((prev) => prev
-        .map((l) => (l.free ? l : { ...l, qty: Math.min(l.qty, l.stock), entregar: undefined }))
-        .filter((l) => l.qty > 0));
+      setLines((prev) => prev.map((l) => (l.free ? l : { ...l, entregar: undefined })));
     }
   };
 
@@ -581,15 +592,24 @@ export default function PosTab({ ctx }: { ctx: SalesCtx }) {
                 <option key={c} value={c}>{SUBCAT_LABEL[c] ?? c}</option>
               ))}
             </Select>
+            <Select value={colorF} onChange={(e) => setColorF(e.target.value)} className="!w-auto" title="Ver solo productos que hay en este color">
+              <option value="">Todos los colores</option>
+              {coloresDisponibles.map((c) => <option key={c} value={c}>{c}</option>)}
+            </Select>
             <Pills<Mode> value={mode} onChange={changeMode} options={[{ key: 'detal', label: 'Detal' }, { key: 'mayor', label: 'Mayor' }]} />
             <Btn variant="ghost" onClick={() => setFreeOpen(true)} title="Cobrar algo que no está en el inventario">＋ Línea libre</Btn>
+            <p className="basis-full text-[11px] text-[#6b7280]">
+              <b>🧾 Facturación / 🛍️ Tienda / Todos</b>: qué catálogo ves (productos de las tiendas o los de la página web) ·{' '}
+              <b>Categoría</b> y <b>Color</b>: filtran la lista · <b>Detal / Mayor</b>: cambia todos los precios de la venta ·{' '}
+              <b>＋ Línea libre</b>: cobrar algo que no está en el inventario.
+            </p>
           </Card>
           <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 2xl:grid-cols-5 gap-3">
             {list.map((p) => {
               const left = stockOf(p.id) - inSaleQty(p.id);
               const out = stockOf(p.id) <= 0;
               return (
-                <Card key={p.id} className={cx('p-3 transition-colors', out ? 'opacity-40' : 'cursor-pointer hover:border-[#a1a1aa]')} onClick={() => (!out || encargo) && addProduct(p)}>
+                <Card key={p.id} className={cx('p-3 transition-colors cursor-pointer hover:border-[#a1a1aa]', out && 'opacity-60')} onClick={() => addProduct(p)}>
                   {p.image ? (
                     <img src={p.image} alt={p.name} className="w-full aspect-square rounded-lg object-cover bg-[#f1f1f3]" loading="lazy" />
                   ) : (
@@ -723,7 +743,7 @@ export default function PosTab({ ctx }: { ctx: SalesCtx }) {
                     // Sólo las tallas y colores con existencias en esta sede.
                     const tallas = tallasCon(l.id!);
                     const colores = coloresCon(l.id!, l.size ?? '');
-                    const opcTallas = tallas.length ? tallas : (l.sizes ?? []);
+                    const opcTallas = tallas.length ? tallas : ordenTallas(l.sizes ?? []);
                     return (
                       <>
                         {opcTallas.length > 0 && (
