@@ -121,14 +121,19 @@ export default function AdminInventory() {
   const esWeb = (p: { web?: boolean }) => p.web !== false;
   const cuentaWeb = products.filter(esWeb).length;
   const cuentaFact = products.length - cuentaWeb;
-  const filteredProducts = products.filter(product => {
-    const q = searchTerm.toLowerCase().trim();
-    const codigos = [product.sku ?? '', ...Object.values(product.skuSizes ?? {})].join(' ').toLowerCase();
-    const matchesSearch = !q || product.name.toLowerCase().includes(q) || codigos.includes(q);
-    const matchesCategory = categoryFilter === 'all' || product.category === categoryFilter;
-    const matchesTipo = tipo === 'todos' || (tipo === 'web' ? esWeb(product) : !esWeb(product));
-    return matchesSearch && matchesCategory && matchesTipo && (!lowOnly || bajo(product));
-  });
+  // Búsqueda sin acentos y por palabras; «tulas» encuentra «TULA», «nino» encuentra «NIÑO».
+  const norm = (t: string) => (t ?? '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase();
+  const words = norm(searchTerm.trim()).split(/\s+/).filter(Boolean).map((w) => (w.length >= 4 ? w.replace(/(as|os|es|a|o|s)$/, '') : w));
+  const coincide = (product: typeof products[number]) => {
+    const hay = norm([product.name, product.sku ?? '', ...Object.values(product.skuSizes ?? {}), product.subcategory, ...(product.colors ?? [])].join(' '));
+    return words.every((w) => hay.includes(w))
+      && (categoryFilter === 'all' || product.category === categoryFilter) && (!lowOnly || bajo(product));
+  };
+  const filteredProducts = products.filter(product =>
+    coincide(product) && (tipo === 'todos' || (tipo === 'web' ? esWeb(product) : !esWeb(product))));
+  // Si la búsqueda no da nada aquí pero sí en la otra pestaña, se avisa.
+  const enOtra = words.length && !filteredProducts.length && tipo !== 'todos'
+    ? products.filter((p) => coincide(p) && (tipo === 'web' ? !esWeb(p) : esWeb(p))).length : 0;
 
   const handleAddProduct = async () => {
     // Validation
@@ -762,7 +767,14 @@ export default function AdminInventory() {
             );
           })}
           {!filteredProducts.length && (
-            <p className="text-center text-muted-foreground py-8">No hay productos que coincidan.</p>
+            <p className="text-center text-muted-foreground py-8">
+              No hay productos que coincidan aquí.
+              {enOtra > 0 && (
+                <button type="button" className="ml-1 underline text-white" onClick={() => setTipo(tipo === 'web' ? 'facturacion' : 'web')}>
+                  Hay {enOtra} en {tipo === 'web' ? '🧾 Solo facturación' : '🛍️ Tienda en línea'} → ver
+                </button>
+              )}
+            </p>
           )}
         </div>
 
@@ -929,6 +941,11 @@ export default function AdminInventory() {
 
         <div className="mt-6 text-muted-foreground text-sm">
           Mostrando {filteredProducts.length} de {products.length} productos
+          {enOtra > 0 && (
+            <button type="button" className="ml-2 underline text-white" onClick={() => setTipo(tipo === 'web' ? 'facturacion' : 'web')}>
+              · {enOtra} coinciden en {tipo === 'web' ? '🧾 Solo facturación' : '🛍️ Tienda en línea'} → ver
+            </button>
+          )}
         </div>
 
         <InventoryPanels products={products} movements={movements} />
