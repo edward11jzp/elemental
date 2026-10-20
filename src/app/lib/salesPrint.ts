@@ -22,7 +22,8 @@ function openAndPrint(html: string, w = 460, h = 800) {
   });
 }
 
-const lineLabel = (i: Sale['items'][number]) => [i.name, i.size, i.color].filter(Boolean).join(' · ');
+const lineLabel = (i: Sale['items'][number]) =>
+  [i.name, i.size, i.color].filter(Boolean).join(' · ') + (i.prints?.length ? ' + Estampado: ' + i.prints.map((p) => p.name).join(' + ') : '');
 
 /** HTML del documento A4 (también se muestra dentro del modal). */
 export function invoiceHtml(s: Sale, co: Company, fallbackRate: number) {

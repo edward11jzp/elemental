@@ -33,6 +33,8 @@ export interface SaleItem {
   cost?: number;
   /** Venta por encargo: cuántas se entregan en el momento. */
   deliverNow?: number;
+  /** Estampados de la prenda; su precio ya va sumado en price. */
+  prints?: { name: string; price: number }[];
 }
 
 export interface PayPart {

@@ -17,16 +17,23 @@ export interface Company {
   phone: string;
   address: string;
 }
+export interface PrintOpt {
+  name: string;
+  price: number;
+}
 export interface AdminSettings {
   rates: Rates;
   taxRate: number;
   company: Company;
+  /** Estampados con su precio, para agregarlos a una prenda al vender. */
+  prints: PrintOpt[];
 }
 
 export const DEFAULT_SETTINGS: AdminSettings = {
   rates: { exchangeRate: 0, realFactor: 0, rateCurrency: 'USD', rateAuto: false, rateDate: null },
   taxRate: 0,
   company: { name: 'Elemental Fábrica', rif: '', email: '', phone: '', address: '' },
+  prints: [],
 };
 
 export async function loadAdminSettings(): Promise<AdminSettings> {
@@ -37,10 +44,11 @@ export async function loadAdminSettings(): Promise<AdminSettings> {
     rates: { ...DEFAULT_SETTINGS.rates, ...(map.rates ?? {}) },
     taxRate: Number(map.taxRate ?? 0) || 0,
     company: { ...DEFAULT_SETTINGS.company, ...(map.company ?? {}) },
+    prints: Array.isArray(map.prints) ? map.prints.map((x: any) => ({ name: String(x.name ?? ''), price: Number(x.price) || 0 })) : [],
   };
 }
 
-export async function saveAdminSetting(key: 'rates' | 'taxRate' | 'company', value: unknown) {
+export async function saveAdminSetting(key: 'rates' | 'taxRate' | 'company' | 'prints', value: unknown) {
   const { error } = await supabase
     .from('admin_settings')
     .upsert({ key, value, updated_at: new Date().toISOString() });

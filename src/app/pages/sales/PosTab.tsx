@@ -4,7 +4,7 @@ import { useApp } from '../../context';
 import { Btn, Card, Input, Label, Modal, Pills, Select, Textarea, cx } from '../../components/admin/ui';
 import { fetchProviderPayments, loadLinks } from '../../lib/payconf';
 import { addSalePayment, createSale, fmt, todayVe, PAY_STATES, DOC_TYPES, type DocType, type PayState } from '../../lib/sales';
-import { createCustomer, fetchBcv, MONEY_ACCOUNTS, saveAdminSetting, accountByKey, type Customer } from '../../lib/adminData';
+import { createCustomer, fetchBcv, MONEY_ACCOUNTS, saveAdminSetting, accountByKey, saveAdminSetting as saveSetting, type Customer, type PrintOpt } from '../../lib/adminData';
 import { getColorUpcharge, getSizeUpcharge } from '../../lib/pricing';
 import type { Product } from '../../types';
 import type { SalesCtx } from '../AdminSales';
@@ -27,9 +27,14 @@ interface Line {
   stock: number;
   /** Por encargo: cuántas se entregan hoy (el resto queda pendiente). */
   entregar?: number;
+  prints?: PrintOpt[];
 }
 
 type Mode = 'detal' | 'mayor';
+
+const printsSum = (l: { prints?: PrintOpt[] }) => (l.prints ?? []).reduce((a, p) => a + p.price, 0);
+const lineKey = (l: { id?: string | null; size?: string; color?: string; prints?: PrintOpt[] }) =>
+  `${l.id}|${l.size ?? ''}|${l.color ?? ''}|${(l.prints ?? []).map((p) => p.name).join('+')}`;
 
 const norm = (t: string) => (t ?? '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase();
 /** Palabras de búsqueda; a las largas se les quita la terminación (negra/negro/negros → negr). */
@@ -112,6 +117,7 @@ export default function PosTab({ ctx }: { ctx: SalesCtx }) {
   const [busy, setBusy] = useState(false);
   const [encargo, setEncargo] = useState(false);
   const [envio, setEnvio] = useState(false);
+  const [printsOpen, setPrintsOpen] = useState(false);
   // Presupuesto cargado para facturarlo: trae líneas, cliente y notas tal como se presupuestó.
   const quote = ctx.quote;
   useEffect(() => {
@@ -122,10 +128,10 @@ export default function PosTab({ ctx }: { ctx: SalesCtx }) {
     setDiscount(String(quote.discount || 0));
     setLines(quote.items.map((i, n) => {
       const p = i.id ? products.find((x) => x.id === i.id) : undefined;
-      const key = i.id ? `${i.id}|${i.size ?? ''}|${i.color ?? ''}` : `free-${n}`;
+      const key = i.id ? lineKey({ id: i.id, size: i.size ?? '', color: i.color ?? '', prints: i.prints }) : `free-${n}`;
       return {
         key, id: i.id, free: !i.id || !!i.free, name: i.name, image: p?.image, sizes: p?.sizes,
-        size: i.size ?? '', color: i.color ?? '', qty: i.qty, price: i.price, cost: i.cost,
+        size: i.size ?? '', color: i.color ?? '', qty: i.qty, price: i.price, cost: i.cost, prints: i.prints ?? [],
         stock: i.id ? qtyAt(sIdx, i.id, vendeEn, i.size ?? '', i.color ?? '') : 0,
       };
     }));
@@ -180,7 +186,7 @@ export default function PosTab({ ctx }: { ctx: SalesCtx }) {
       if (l.free || !l.id) return l;
       const p = products.find((x) => x.id === l.id);
       if (!p) return l;
-      const np = basePrice(p, m) + getSizeUpcharge(l.size) + getColorUpcharge(l.color);
+      const np = basePrice(p, m) + getSizeUpcharge(l.size) + getColorUpcharge(l.color) + printsSum(l);
       if (np !== l.price) changed++;
       return { ...l, price: np };
     });
@@ -219,7 +225,7 @@ export default function PosTab({ ctx }: { ctx: SalesCtx }) {
       : [...conStock].sort((a, b) => score(b) - score(a))[0];
     const size = mejor?.size ?? p.sizes?.[0] ?? '';
     const color = mejor?.color ?? conStock.find((r) => r.size === size)?.color ?? '';
-    const key = `${p.id}|${size ?? ''}|${color}`;
+    const key = lineKey({ id: p.id, size, color });
     setLines((prev) => {
       const ex = prev.find((l) => l.key === key);
       const inSale = prev.filter((l) => l.id === p.id).reduce((a, l) => a + l.qty, 0);
@@ -249,7 +255,7 @@ export default function PosTab({ ctx }: { ctx: SalesCtx }) {
         }
         const p = products.find((x) => x.id === l.id);
         if (p) {
-          next.price = basePrice(p, mode) + getSizeUpcharge(next.size) + getColorUpcharge(next.color);
+          next.price = basePrice(p, mode) + getSizeUpcharge(next.size) + getColorUpcharge(next.color) + printsSum(next);
           next.stock = qtyAt(sIdx, p.id, vendeEn, next.size ?? '', next.color ?? '');
         }
       }
@@ -267,7 +273,8 @@ export default function PosTab({ ctx }: { ctx: SalesCtx }) {
         next.qty = qn;
       }
       if (encargo && !l.free) next.entregar = Math.max(0, Math.min(Math.floor(Number(next.entregar) || 0), next.qty, next.stock));
-      next.key = l.free ? l.key : `${l.id}|${next.size ?? ''}|${next.color ?? ''}`;
+      if (patch.prints !== undefined && !l.free) next.price = Math.round((l.price - printsSum(l) + printsSum(next)) * 100) / 100;
+      next.key = l.free ? l.key : lineKey(next);
       // Si al cambiar talla/color coincide con otra línea, se unen.
       const dup = prev.find((x) => x.key === next.key && x.key !== key);
       if (dup) return prev.filter((x) => x.key !== key).map((x) => (x.key === dup.key ? { ...x, qty: x.qty + next.qty } : x));
@@ -428,7 +435,7 @@ export default function PosTab({ ctx }: { ctx: SalesCtx }) {
         customerId: customer?.id ?? null,
         customer: customer?.name ?? '',
         email: customer?.email ?? '',
-        items: lines.map((l) => ({ id: l.id, free: !!l.free, name: l.name, size: l.size ?? null, color: l.color || null, qty: l.qty, price: l.price, cost: l.cost, deliverNow: l.free ? l.qty : (l.entregar ?? 0) })),
+        items: lines.map((l) => ({ id: l.id, free: !!l.free, name: l.name, size: l.size ?? null, color: l.color || null, qty: l.qty, price: l.price, cost: l.cost, prints: l.prints ?? [], deliverNow: l.free ? l.qty : (l.entregar ?? 0) })),
         encargo,
         shipping: envio,
         fromQuote: quote?.id ?? null,
@@ -684,7 +691,29 @@ export default function PosTab({ ctx }: { ctx: SalesCtx }) {
                       {l.name}
                       {l.free && <span className="ml-1 text-[9px] uppercase tracking-wider px-1.5 py-0.5 rounded bg-[#f3e8ff] text-[#7e22ce]">libre</span>}
                     </div>
-                    <div className="text-[11px] text-[#6b7280]">{fmt(l.price)} c/u</div>
+                    <div className="text-[11px] text-[#6b7280]">{fmt(l.price)} c/u{l.prints?.length ? ` · incluye 🎨 ${l.prints.map((p) => `${p.name} ${fmt(p.price)}`).join(' + ')}` : ''}</div>
+                    {!l.free && (
+                      <div className="mt-1 flex flex-wrap gap-1">
+                        {ctx.settings.prints.map((p) => {
+                          const on = !!l.prints?.some((x) => x.name === p.name);
+                          return (
+                            <button
+                              key={p.name}
+                              type="button"
+                              onClick={() => updateLine(l.key, { prints: on ? (l.prints ?? []).filter((x) => x.name !== p.name) : [...(l.prints ?? []), p] })}
+                              className={`rounded-full border px-2 py-0.5 text-[11px] ${on ? 'border-[#7e22ce] bg-[#f3e8ff] text-[#7e22ce]' : 'border-[#e6e6e9] text-[#52525b]'}`}
+                            >
+                              {on ? '✓ ' : '🎨 '}{p.name} +{fmt(p.price)}
+                            </button>
+                          );
+                        })}
+                        {isAdmin && (
+                          <button type="button" onClick={() => setPrintsOpen(true)} className="rounded-full border border-dashed border-[#d4d4d8] px-2 py-0.5 text-[11px] text-[#6b7280]">
+                            {ctx.settings.prints.length ? '⚙️' : '🎨 Configurar estampados'}
+                          </button>
+                        )}
+                      </div>
+                    )}
                   </div>
                   <span className="w-20 text-right font-semibold">{fmt(l.price * l.qty)}</span>
                   <button type="button" onClick={() => removeLine(l.key)} className="text-[#9ca3af] hover:text-[#dc2626] px-1" aria-label="Quitar">✕</button>
@@ -918,6 +947,7 @@ export default function PosTab({ ctx }: { ctx: SalesCtx }) {
           toast('Agregado: ' + l.name);
         }}
       />
+      <PrintsModal open={printsOpen} onClose={() => setPrintsOpen(false)} value={ctx.settings.prints} onSaved={(prints) => ctx.setSettings({ ...ctx.settings, prints })} />
       <NewCustomerModal
         open={custOpen}
         onClose={() => setCustOpen(false)}
@@ -1076,5 +1106,49 @@ function CustomerPicker({ customers, value, onChange, onNew }: { customers: Cust
         </div>
       )}
     </div>
+  );
+}
+
+/** Lista de estampados y sus precios (la edita un administrador o gerente). */
+function PrintsModal({ open, onClose, value, onSaved }: { open: boolean; onClose: () => void; value: PrintOpt[]; onSaved: (p: PrintOpt[]) => void }) {
+  const [rows, setRows] = useState<{ name: string; price: string }[]>([]);
+  const [busy, setBusy] = useState(false);
+  useEffect(() => {
+    if (open) setRows(value.length ? value.map((p) => ({ name: p.name, price: String(p.price) })) : [{ name: '', price: '' }]);
+  }, [open, value]);
+  const save = async () => {
+    const clean = rows.map((r) => ({ name: r.name.trim(), price: Math.round((Number(r.price) || 0) * 100) / 100 })).filter((r) => r.name);
+    if (clean.some((r) => r.price < 0)) return toast.error('Precio inválido');
+    if (new Set(clean.map((r) => r.name.toLowerCase())).size !== clean.length) return toast.error('Hay dos estampados con el mismo nombre');
+    setBusy(true);
+    try {
+      await saveSetting('prints', clean);
+      onSaved(clean);
+      toast.success('Estampados guardados ✓');
+      onClose();
+    } catch (e: any) {
+      toast.error(e.message);
+    } finally {
+      setBusy(false);
+    }
+  };
+  return (
+    <Modal open={open} onClose={onClose} title="🎨 Estampados y precios">
+      <div className="space-y-2">
+        <p className="text-[12px] text-[#6b7280]">Aparecen como botones en cada prenda de la venta. El precio se suma por pieza.</p>
+        {rows.map((r, i) => (
+          <div key={i} className="flex gap-2">
+            <Input placeholder="Ej: Frontal pequeño" value={r.name} onChange={(e) => setRows((p) => p.map((x, j) => (j === i ? { ...x, name: e.target.value } : x)))} />
+            <Input type="number" step="0.01" min={0} placeholder="$" value={r.price} onChange={(e) => setRows((p) => p.map((x, j) => (j === i ? { ...x, price: e.target.value } : x)))} className="!w-24" />
+            <button type="button" className="px-1 text-[#6b7280]" onClick={() => setRows((p) => p.filter((_, j) => j !== i))}>✕</button>
+          </div>
+        ))}
+        <Btn variant="ghost" onClick={() => setRows((p) => [...p, { name: '', price: '' }])}>＋ Agregar estampado</Btn>
+        <div className="flex justify-end gap-2 pt-1">
+          <Btn variant="ghost" onClick={onClose}>Cancelar</Btn>
+          <Btn disabled={busy} onClick={save}>{busy ? 'Guardando…' : 'Guardar'}</Btn>
+        </div>
+      </div>
+    </Modal>
   );
 }
