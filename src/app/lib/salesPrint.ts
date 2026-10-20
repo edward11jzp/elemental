@@ -2,7 +2,7 @@
 import logo from 'figma:asset/480ee1658c29520edefebbfe9dcbc0d422f8424b.png';
 import type { Sale } from './sales';
 import { docLabel, fmt, bsFmt, saleDateLabel } from './sales';
-import type { Company } from './adminData';
+import { accountByKey, type Company } from './adminData';
 
 const esc = (s: unknown) =>
   String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]!);
@@ -24,6 +24,31 @@ function openAndPrint(html: string, w = 460, h = 800) {
 
 const lineLabel = (i: Sale['items'][number]) =>
   [i.name, i.size, i.color].filter(Boolean).join(' · ') + (i.prints?.length ? ' + Estampado: ' + i.prints.map((p) => p.name).join(' + ') : '');
+
+const bsTxt = (v: number) => 'Bs ' + Math.round(v).toLocaleString('es-VE');
+
+/** Cómo se pagó, para imprimirlo: cada método con su monto en la moneda en que entró. */
+function payLines(s: Sale, rate: number): [string, string][] {
+  const acc = (k: string | null) => {
+    if (k === 'credito') return '💳 Crédito (financiado)';
+    const a = accountByKey(k);
+    return a ? a.name : k || 'Sin especificar';
+  };
+  const enSu = (method: string | null, usd: number, local?: number | null) => {
+    const c = accountByKey(method)?.currency;
+    if (c === 'BS') return bsTxt(local || usd * rate);
+    if (c === 'COP') return local ? 'COP ' + Math.round(local).toLocaleString('es-VE') : fmt(usd);
+    return fmt(usd);
+  };
+  if (s.doc === 'cotizacion') return [];
+  if (s.payMethod === 'mixto' && s.paySplit.length) return s.paySplit.map((x) => [acc(x.method), enSu(x.method, x.amount, x.local)]);
+  if (s.payMethod === 'credito') {
+    const paid = s.payments.reduce((a, p) => a + p.amount, 0);
+    return [[acc('credito'), fmt(s.total)], ...(paid ? [['Abonado', fmt(paid)] as [string, string]] : [])];
+  }
+  if (s.pay === 'pendiente' || !s.payMethod) return [['Por cobrar', fmt(s.total)]];
+  return [[acc(s.payMethod) + (s.pay === 'parcial' ? ' (parcial)' : ''), enSu(s.payMethod, s.total, s.payCurrency === 'BS' ? s.totalBs : null)]];
+}
 
 /** HTML del documento A4 (también se muestra dentro del modal). */
 export function invoiceHtml(s: Sale, co: Company, fallbackRate: number) {
@@ -72,7 +97,9 @@ export function invoiceHtml(s: Sale, co: Company, fallbackRate: number) {
       <div style="display:flex;justify-content:space-between;padding:4px 0"><span style="color:#666">Subtotal</span><span>${f(s.subtotal)}</span></div>
       ${s.discount ? `<div style="display:flex;justify-content:space-between;padding:4px 0"><span style="color:#666">Descuento</span><span>-${f(s.discount)}</span></div>` : ''}
       <div style="display:flex;justify-content:space-between;padding:4px 0"><span style="color:#666">IVA (${s.taxRate}%)</span><span>${f(s.tax)}</span></div>
-      <div style="display:flex;justify-content:space-between;padding:8px 0;border-top:2px solid #111;font-weight:800;font-size:16px"><span>TOTAL</span><span>${useBs ? 'Bs ' + totalBs.toLocaleString('es-VE') : fmt(s.total)}</span></div>
+      <div style="display:flex;justify-content:space-between;padding:8px 0;border-top:2px solid #111;font-weight:800;font-size:16px"><span>TOTAL</span><span>${rate > 0 ? bsTxt(totalBs) : fmt(s.total)}</span></div>
+      ${rate > 0 ? `<div style="display:flex;justify-content:space-between;padding:2px 0;color:#666;font-size:12px"><span>Equivale a</span><span>${fmt(s.total)} · tasa Bs ${Number(r).toLocaleString('es-VE')}</span></div>` : ''}
+      ${payLines(s, r).length ? `<div style="margin-top:8px;border-top:1px solid #eee;padding-top:6px"><div style="color:#999;text-transform:uppercase;font-size:10px;letter-spacing:.1em;margin-bottom:2px">Forma de pago</div>${payLines(s, r).map(([k, v]) => `<div style="display:flex;justify-content:space-between;padding:2px 0"><span>${esc(k)}</span><span>${esc(v)}</span></div>`).join('')}</div>` : ''}
     </div></div>
     ${s.notes ? `<div style="margin-top:14px;color:#666"><b>Notas:</b> ${esc(s.notes)}</div>` : ''}
     <div style="margin-top:18px;text-align:center;border-top:1px solid #eee;padding-top:12px">
@@ -126,9 +153,10 @@ export function printTicket(s: Sale, co: Company, fallbackRate: number) {
     ${s.discount ? `<div class="r"><span>Descuento</span><span>-${f(s.discount)}</span></div>` : ''}
     <div class="r"><span>IVA ${s.taxRate}%</span><span>${f(s.tax)}</span></div>
     <div class="box c"><div class="lbl">${totalLabel}</div>
-      <div class="b huge">${useBs ? 'Bs ' + totalBs.toLocaleString('es-VE') : fmt(s.total)}</div>
-      <div class="tiny">${useBs ? 'equivale a ' + fmt(s.total) : rate > 0 ? 'equivale a Bs ' + totalBs.toLocaleString('es-VE') : ''}</div></div>
+      <div class="b huge">${rate > 0 ? bsTxt(totalBs) : fmt(s.total)}</div>
+      <div class="tiny">${rate > 0 ? 'equivale a ' + fmt(s.total) : ''}</div></div>
     ${rate > 0 ? `<div class="c tiny">Tasa BCV: Bs ${Number(r).toLocaleString('es-VE')} / $</div>` : ''}
+    ${payLines(s, r).length ? `<div class="sec">FORMA DE PAGO</div>${payLines(s, r).map(([k, v]) => `<div class="r"><span>${esc(k)}</span><span>${esc(v)}</span></div>`).join('')}` : ''}
     ${s.notes ? `<div class="hr"></div><div>${esc(s.notes)}</div>` : ''}
     <div class="hr"></div><div class="c b">Gracias por tu compra.</div><div class="c">Elemental · Redefine tu estilo.</div>
     <div class="hr"></div>${co.email ? `<div class="c">${esc(co.email)}</div>` : ''}<div class="c">elementalfabrica.com</div>
