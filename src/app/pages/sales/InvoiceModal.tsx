@@ -35,6 +35,26 @@ export default function InvoiceModal({ ctx, saleId, onClose }: { ctx: SalesCtx; 
     }
   };
 
+  // Abre el correo del equipo con el documento escrito; el PDF se adjunta guardándolo desde «A4».
+  const sendMail = () => {
+    const to = s.email || prompt('Correo del cliente:', '') || '';
+    if (!to.trim()) return;
+    const lineas = s.items.map((i) => `• ${i.qty} × ${i.name}${i.size ? ' ' + i.size : ''}${i.color ? ' ' + i.color : ''} — ${fmt(i.price * i.qty)}`);
+    const body = [
+      `Hola${s.customer ? ' ' + s.customer : ''},`,
+      '',
+      `Te enviamos tu ${docLabel(s.doc).toLowerCase()} ${s.id}:`,
+      '',
+      ...lineas,
+      '',
+      s.discount ? `Descuento: ${fmt(s.discount)}` : '',
+      `Total: ${fmt(s.total)}${rate ? ` (Bs ${totalBs.toLocaleString('es-VE')})` : ''}`,
+      '',
+      co.name || 'Elemental',
+    ].filter((l, i, a) => l !== '' || a[i - 1] !== '').join('\n');
+    window.location.href = `mailto:${encodeURIComponent(to.trim())}?subject=${encodeURIComponent(`${docLabel(s.doc)} ${s.id} · ${co.name || 'Elemental'}`)}&body=${encodeURIComponent(body)}`;
+  };
+
   const toggleEnvio = async (on: boolean) => {
     try {
       await setSaleShipping(s.id, on);
@@ -55,6 +75,7 @@ export default function InvoiceModal({ ctx, saleId, onClose }: { ctx: SalesCtx; 
         <div className="hidden sm:flex gap-2">
           <Btn variant="ghost" className="!py-1.5 !text-[12px]" onClick={() => safe(() => printInvoice(s, co, fallback))}>🖨️ A4</Btn>
           <Btn variant="ghost" className="!py-1.5 !text-[12px]" onClick={() => safe(() => printTicket(s, co, fallback))}>🧾 Ticket 80mm</Btn>
+          <Btn variant="ghost" className="!py-1.5 !text-[12px]" onClick={sendMail}>✉️ Correo</Btn>
           {ctx.isAdmin && <Btn variant="ghost" className="!py-1.5 !text-[12px]" onClick={editDate}>📅 Fecha</Btn>}
           {s.doc === 'cotizacion' && !s.convertedTo && s.pay !== 'cancelado' && <Btn variant="success" className="!py-1.5 !text-[12px]" onClick={() => ctx.loadQuote(s)}>➜ Facturar</Btn>}
         </div>
@@ -63,6 +84,7 @@ export default function InvoiceModal({ ctx, saleId, onClose }: { ctx: SalesCtx; 
       <div className="flex sm:hidden gap-2 mb-3">
         <Btn variant="ghost" className="flex-1 !text-[12px]" onClick={() => safe(() => printInvoice(s, co, fallback))}>🖨️ A4</Btn>
         <Btn variant="ghost" className="flex-1 !text-[12px]" onClick={() => safe(() => printTicket(s, co, fallback))}>🧾 Ticket</Btn>
+        <Btn variant="ghost" className="flex-1 !text-[12px]" onClick={sendMail}>✉️</Btn>
         {ctx.isAdmin && <Btn variant="ghost" className="!text-[12px]" onClick={editDate}>📅</Btn>}
         {s.doc === 'cotizacion' && !s.convertedTo && s.pay !== 'cancelado' && <Btn variant="success" className="!text-[12px]" onClick={() => ctx.loadQuote(s)}>➜ Facturar</Btn>}
       </div>
