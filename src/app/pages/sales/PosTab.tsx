@@ -103,7 +103,10 @@ export default function PosTab({ ctx }: { ctx: SalesCtx }) {
   const [notes, setNotes] = useState('');
   const [doc, setDoc] = useState<DocType>('nota_entrega');
   const [pay, setPay] = useState<PayState>('pagado');
-  const [method, setMethod] = useState('efectivo_usd');
+  // Método obligatorio (sin valor por defecto). Con «extra» la venta se cobra con varios métodos.
+  const [method, setMethod] = useState('');
+  const [amt0, setAmt0] = useState('');
+  const [extra, setExtra] = useState<{ method: string; amount: string; local: string }[]>([]);
   const [payCur, setPayCur] = useState<'USD' | 'BS'>('USD');
   const [date, setDate] = useState(todayVe());
   const [busy, setBusy] = useState(false);
@@ -397,6 +400,24 @@ export default function PosTab({ ctx }: { ctx: SalesCtx }) {
   /* ---------- Completar venta ---------- */
   const complete = async () => {
     if (!lines.length) return toast.error('Agrega al menos un producto');
+    const cobra = !aCredito && pay !== 'pendiente' && doc !== 'cotizacion';
+    let paySplit: { method: string; currency: string; amount: number; local: number | null }[] = [];
+    if (cobra) {
+      if (!method || extra.some((x) => !x.method)) return toast.error('Elige el método de pago');
+      if (extra.length) {
+        const rows = [{ method, amount: amt0, local: '' }, ...extra];
+        paySplit = rows.map((x) => {
+          const cur = accountByKey(x.method)?.currency ?? 'USD';
+          const amount = Math.round((Number(x.amount) || 0) * 100) / 100;
+          const local = cur === 'USD' ? null : Number(x.local) || (cur === 'BS' && tasaN ? Math.round(amount * tasaN * 100) / 100 : null);
+          return { method: x.method, currency: cur, amount, local };
+        });
+        if (paySplit.some((x) => x.amount <= 0)) return toast.error('Pon el monto de cada método');
+        const sum = paySplit.reduce((a, x) => a + x.amount, 0);
+        if (pay === 'pagado' && Math.abs(sum - total) > 0.01) return toast.error(`Los pagos suman ${fmt(sum)} y la venta es de ${fmt(total)}`);
+        if (sum > total + 0.01) return toast.error(`Los pagos suman ${fmt(sum)}, más que la venta (${fmt(total)})`);
+      }
+    }
     const ini = aCredito ? Math.round((Number(iniAmt) || 0) * 100) / 100 : 0;
     if (ini > total + 0.005) return toast.error('El abono inicial supera el total');
     if (ini > 0 && iniIsBs && !(Number(iniBs) > 0)) return toast.error('Indica cuánto entró en Bs del abono inicial');
@@ -414,7 +435,8 @@ export default function PosTab({ ctx }: { ctx: SalesCtx }) {
         discount: disc,
         taxRate: taxR,
         pay: aCredito ? ('pendiente' as const) : pay,
-        payMethod: aCredito || pay === 'pendiente' ? null : method,
+        payMethod: aCredito || pay === 'pendiente' ? null : extra.length ? 'mixto' : method || null,
+        paySplit,
         payCurrency: aCredito || pay === 'pendiente' ? null : payCur,
         docCurrency: docCur,
         date: isAdmin ? date : null,
@@ -446,6 +468,7 @@ export default function PosTab({ ctx }: { ctx: SalesCtx }) {
       setLines([]);
       setEncargo(false);
       setEnvio(false);
+      setMethod(''); setAmt0(''); setExtra([]);
       ctx.loadQuote(null);
       setDiscount('0');
       setNotes('');
@@ -797,15 +820,61 @@ export default function PosTab({ ctx }: { ctx: SalesCtx }) {
 
           {!aCredito && pay !== 'pendiente' && (
             <div className="grid grid-cols-2 gap-2">
-              <Select value={method} onChange={(e) => setMethod(e.target.value)} title="Con qué te pagaron">
+              <Select value={method} onChange={(e) => setMethod(e.target.value)} title="Con qué te pagaron" className={method ? '' : '!border-[#f59e0b]'}>
+                <option value="">— Método de pago —</option>
                 {MONEY_ACCOUNTS.map((m) => (
                   <option key={m.key} value={m.key}>{m.icon} {m.name}</option>
                 ))}
               </Select>
-              <Select value={payCur} onChange={(e) => setPayCur(e.target.value as 'USD' | 'BS')} title="Moneda en que recibiste el pago">
-                <option value="BS">Cobrado en Bs</option>
-                <option value="USD">Cobrado en $</option>
-              </Select>
+              {extra.length ? (
+                <Input type="number" step="0.01" min={0} placeholder="$ de este método" value={amt0} onChange={(e) => setAmt0(e.target.value)} />
+              ) : (
+                <Select value={payCur} onChange={(e) => setPayCur(e.target.value as 'USD' | 'BS')} title="Moneda en que recibiste el pago">
+                  <option value="BS">Cobrado en Bs</option>
+                  <option value="USD">Cobrado en $</option>
+                </Select>
+              )}
+              {extra.map((x, i) => {
+                const cur = accountByKey(x.method)?.currency ?? 'USD';
+                const set = (patch: Partial<typeof x>) => setExtra((prev) => prev.map((y, j) => (j === i ? { ...y, ...patch } : y)));
+                return (
+                  <div key={i} className="col-span-2 grid grid-cols-[1fr_1fr_auto] gap-2">
+                    <Select value={x.method} onChange={(e) => set({ method: e.target.value, local: '' })} className={x.method ? '' : '!border-[#f59e0b]'}>
+                      <option value="">— Método —</option>
+                      {MONEY_ACCOUNTS.map((m) => <option key={m.key} value={m.key}>{m.icon} {m.name}</option>)}
+                    </Select>
+                    <div className="flex gap-1">
+                      <Input type="number" step="0.01" min={0} placeholder="$" value={x.amount} onChange={(e) => set({ amount: e.target.value })} />
+                      {cur !== 'USD' && (
+                        <Input type="number" step="0.01" min={0} title={`Cuánto entró en ${cur === 'BS' ? 'Bs' : 'COP'}`}
+                          placeholder={cur === 'BS' ? (Number(x.amount) && tasaN ? 'Bs ' + Math.round(Number(x.amount) * tasaN) : 'Bs') : 'COP'}
+                          value={x.local} onChange={(e) => set({ local: e.target.value })} />
+                      )}
+                    </div>
+                    <button type="button" className="px-1 text-[#6b7280]" title="Quitar" onClick={() => setExtra((prev) => prev.filter((_, j) => j !== i))}>✕</button>
+                  </div>
+                );
+              })}
+              <div className="col-span-2 flex items-center justify-between text-[12px]">
+                <button
+                  type="button"
+                  className="text-[#1d4ed8]"
+                  onClick={() => {
+                    // Al pasar a mixto, lo que falta se propone en la nueva línea.
+                    if (!extra.length) setAmt0('');
+                    const pagado = extra.length ? (Number(amt0) || 0) + extra.reduce((a, x) => a + (Number(x.amount) || 0), 0) : total;
+                    const falta = Math.max(0, Math.round((total - pagado) * 100) / 100);
+                    setExtra((prev) => [...prev, { method: '', amount: falta ? String(falta) : '', local: '' }]);
+                  }}
+                >
+                  ＋ Pagar con otro método (mixto)
+                </button>
+                {extra.length > 0 && (() => {
+                  const sum = (Number(amt0) || 0) + extra.reduce((a, x) => a + (Number(x.amount) || 0), 0);
+                  const falta = Math.round((total - sum) * 100) / 100;
+                  return <span className={Math.abs(falta) > 0.01 ? 'text-[#dc2626]' : 'text-[#15803d]'}>{Math.abs(falta) <= 0.01 ? '✓ Cuadra' : falta > 0 ? `Falta ${fmt(falta)}` : `Sobra ${fmt(-falta)}`}</span>;
+                })()}
+              </div>
             </div>
           )}
 

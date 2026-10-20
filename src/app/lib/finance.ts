@@ -178,6 +178,17 @@ export function computeBalances(opts: { configs: AccountConfig[]; moves: Finance
       }
     }
     if (s.doc === 'cotizacion' || s.pay !== 'pagado' || s.payMethod === 'credito') continue;
+    // Pago mixto: cada parte entra a su cuenta.
+    if (s.payMethod === 'mixto') {
+      for (const x of s.paySplit) {
+        const bx = book[x.method];
+        if (!bx) { unassigned++; continue; }
+        if (bx.since && veDay(s.date) <= bx.since) continue;
+        bx.sales += bx.currency === 'BS' ? x.local || x.amount * (s.exchangeRate || rate) : bx.currency === 'COP' ? x.local || x.amount * copRate : x.amount;
+        bx.salesCount++;
+      }
+      continue;
+    }
     const b = s.payMethod ? book[s.payMethod] : undefined;
     if (!b) { unassigned++; continue; }
     if (b.since && veDay(s.date) <= b.since) continue;

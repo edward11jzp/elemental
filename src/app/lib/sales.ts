@@ -35,6 +35,13 @@ export interface SaleItem {
   deliverNow?: number;
 }
 
+export interface PayPart {
+  method: string;
+  currency: string;
+  amount: number;
+  local: number | null;
+}
+
 export interface Sale {
   id: string;
   doc: DocType;
@@ -46,6 +53,8 @@ export interface Sale {
   isShipping: boolean;
   /** Si es un presupuesto ya facturado, la venta que salió de él. */
   convertedTo: string | null;
+  /** Pago mixto (payMethod = 'mixto'): cada parte en $ y, si aplica, en Bs/COP. */
+  paySplit: PayPart[];
   customerId: string | null;
   customer: string;
   email: string;
@@ -93,6 +102,7 @@ function rowToSale(r: any): Sale {
     locationName: r.location_name ?? '',
     isShipping: !!r.is_shipping,
     convertedTo: r.converted_to ?? null,
+    paySplit: (r.pay_split ?? []).map((x: any) => ({ method: x.method, currency: x.currency ?? 'USD', amount: n(x.amount), local: x.local == null ? null : n(x.local) })),
     customerId: r.customer_id ?? null,
     customer: r.customer ?? '',
     email: r.email ?? '',
@@ -149,6 +159,7 @@ export interface NewSale {
   shipping?: boolean;
   /** Presupuesto del que sale esta venta. */
   fromQuote?: string | null;
+  paySplit?: PayPart[];
 }
 
 export async function createSale(s: NewSale): Promise<Sale> {

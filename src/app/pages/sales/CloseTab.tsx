@@ -58,10 +58,15 @@ export function buildCloseReport(all: Sale[], from: string, to: string, hideCost
     d.count++; d.usd += s.total; d.bs += bsOf(s); d.profit += s.subtotal - s.discount - saleCost(s);
     byDayMap.set(day, d);
     if ((s.pay === 'pagado' || s.pay === 'parcial') && s.payMethod !== 'credito') {
-      const k = s.payMethod ?? 'sin-registrar';
-      const m = byMethodMap.get(k) ?? { method: k, label: methodLabel(s.payMethod), count: 0, usd: 0, bs: 0 };
-      m.count++; m.usd += s.total; m.bs += bsOf(s);
-      byMethodMap.set(k, m);
+      // Pago mixto: cada parte suma en su método.
+      const partes = s.payMethod === 'mixto' && s.paySplit.length
+        ? s.paySplit.map((x) => ({ k: x.method, usd: x.amount, bs: x.currency === 'BS' ? x.local || x.amount * (s.exchangeRate || 0) : s.total ? (bsOf(s) * x.amount) / s.total : 0 }))
+        : [{ k: s.payMethod ?? 'sin-registrar', usd: s.total, bs: bsOf(s) }];
+      partes.forEach((x) => {
+        const m = byMethodMap.get(x.k) ?? { method: x.k, label: methodLabel(x.k === 'sin-registrar' ? null : x.k), count: 0, usd: 0, bs: 0 };
+        m.count++; m.usd += x.usd; m.bs += x.bs;
+        byMethodMap.set(x.k, m);
+      });
     }
     const u = byUserMap.get(s.userName) ?? { user: s.userName || '—', count: 0, usd: 0 };
     u.count++; u.usd += s.total;
