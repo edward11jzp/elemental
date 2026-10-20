@@ -6,7 +6,8 @@ import { supabase } from './supabase';
 export interface Rates {
   exchangeRate: number;
   realFactor: number;
-  rateCurrency: 'USD' | 'EUR';
+  /** Con cuál tasa se cobra: BCV dólar, BCV euro o una personalizada/promedio (solo admin). */
+  rateCurrency: 'USD' | 'EUR' | 'CUSTOM';
   rateAuto: boolean;
   rateDate: string | null;
 }

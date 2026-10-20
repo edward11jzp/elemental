@@ -48,9 +48,10 @@ export default function AdminInventory() {
   const [movementFor, setMovementFor] = useState<string | null | undefined>(undefined);
   const [transferFor, setTransferFor] = useState<string | null | undefined>(undefined);
   const [tipo, setTipo] = useState<'web' | 'facturacion' | 'todos'>(() => {
-    try { return (localStorage.getItem('elemental_inv_tipo') as any) ?? 'web'; } catch { return 'web'; }
+    // Por defecto se ve todo el inventario (tienda en línea + facturación).
+    try { return (localStorage.getItem('elemental_inv_tipo2') as any) ?? 'todos'; } catch { return 'todos'; }
   });
-  useEffect(() => { try { localStorage.setItem('elemental_inv_tipo', tipo); } catch { /* ventana privada */ } }, [tipo]);
+  useEffect(() => { try { localStorage.setItem('elemental_inv_tipo2', tipo); } catch { /* ventana privada */ } }, [tipo]);
   const [stock, setStock] = useState<StockRow[]>([]);
   const { sede, sedes, nameOf } = useSedes();
   const reloadStock = () => loadStock().then(setStock).catch(() => setStock([]));
@@ -129,8 +130,9 @@ export default function AdminInventory() {
     return words.every((w) => hay.includes(w))
       && (categoryFilter === 'all' || product.category === categoryFilter) && (!lowOnly || bajo(product));
   };
+  // Al buscar se busca en todo el inventario, sin importar la pestaña.
   const filteredProducts = products.filter(product =>
-    coincide(product) && (tipo === 'todos' || (tipo === 'web' ? esWeb(product) : !esWeb(product))));
+    coincide(product) && (words.length > 0 || tipo === 'todos' || (tipo === 'web' ? esWeb(product) : !esWeb(product))));
   // Si la búsqueda no da nada aquí pero sí en la otra pestaña, se avisa.
   const enOtra = words.length && !filteredProducts.length && tipo !== 'todos'
     ? products.filter((p) => coincide(p) && (tipo === 'web' ? !esWeb(p) : esWeb(p))).length : 0;
@@ -718,7 +720,7 @@ export default function AdminInventory() {
                     <p className="leading-tight">{product.name}</p>
                     <p className="text-xs text-muted-foreground mt-0.5">
                       {product.sku ? <span className="font-mono">{product.sku}</span> : null}
-                      {product.sku ? ' · ' : ''}{product.subcategory}
+                      {product.sku ? ' · ' : ''}{product.subcategory}{esWeb(product) ? ' · 🛍️ web' : ' · 🧾 facturación'}
                       {product.web === false && <span className="ml-1 rounded px-1 py-0.5 text-[10px] bg-[#e0e7ff] text-[#3730a3]">facturación</span>}
                     </p>
                     <p className="text-sm mt-1">
@@ -820,7 +822,7 @@ export default function AdminInventory() {
                           </p>
                           <p className="text-sm text-muted-foreground">
                             {product.sku ? <span className="font-mono">{product.sku}</span> : null}
-                            {product.sku ? ' · ' : ''}{product.subcategory}
+                            {product.sku ? ' · ' : ''}{product.subcategory}{esWeb(product) ? ' · 🛍️ web' : ' · 🧾 facturación'}
                           </p>
                         </div>
                       </div>

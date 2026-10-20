@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
+import { usePerms } from '../../lib/perms';
 import { toast } from 'sonner';
 import { useApp } from '../../context';
 import { Btn, Card, Input, Label, Modal, Pills, Select, Textarea, cx } from '../../components/admin/ui';
@@ -90,6 +91,9 @@ export default function PosTab({ ctx }: { ctx: SalesCtx }) {
 
   const { products } = useApp();
   const { settings, isAdmin } = ctx;
+  // Solo el administrador escribe una tasa propia (personalizada o promedio) y edita estampados.
+  const soloAdmin = usePerms().isAdmin;
+  const custom = settings.rates.rateCurrency === 'CUSTOM';
 
   // Tasas
   const [tasa, setTasa] = useState('');
@@ -344,7 +348,7 @@ export default function PosTab({ ctx }: { ctx: SalesCtx }) {
       toast.error(e.message);
     }
   };
-  const bringBcv = async (cur = settings.rates.rateCurrency) => {
+  const bringBcv = async (cur: 'USD' | 'EUR' = settings.rates.rateCurrency === 'EUR' ? 'EUR' : 'USD') => {
     setBcvBusy(true);
     try {
       const b = await fetchBcv();
@@ -355,8 +359,12 @@ export default function PosTab({ ctx }: { ctx: SalesCtx }) {
         return toast.error('El BCV no publicó el euro · tasa en 0');
       }
       setTasa(String(rate));
+      // Se aplica de una vez, para que todas las ventas usen la tasa nueva.
+      const rates = { ...settings.rates, rateCurrency: cur, exchangeRate: rate, rateDate: todayVe() };
+      await saveAdminSetting('rates', rates);
+      ctx.setSettings({ ...settings, rates });
       const otra = cur === 'EUR' ? `dólar Bs ${Math.round(b.usd).toLocaleString('es-VE')}` : b.eur ? `euro Bs ${Math.round(b.eur).toLocaleString('es-VE')}` : '';
-      setRateLabel(`BCV ${b.date ?? ''} · ${cur === 'EUR' ? 'euro' : 'dólar'}: Bs ${rate.toLocaleString('es-VE')}${otra ? ' (el ' + otra + ')' : ''} — pulsa "Guardar tasas" para aplicarla`);
+      setRateLabel(`BCV ${b.date ?? ''} · ${cur === 'EUR' ? 'euro' : 'dólar'}: Bs ${rate.toLocaleString('es-VE')}${otra ? ' (el ' + otra + ')' : ''} — aplicada ✓`);
       toast.success(`Tasa BCV ${cur === 'EUR' ? 'euro' : 'dólar'}: Bs ${rate.toLocaleString('es-VE')}`);
     } catch {
       toast.error('No se pudo consultar el BCV. Escribe la tasa a mano.');
@@ -364,11 +372,13 @@ export default function PosTab({ ctx }: { ctx: SalesCtx }) {
       setBcvBusy(false);
     }
   };
-  const setRateCurrency = async (cur: 'USD' | 'EUR') => {
-    const rates = { ...settings.rates, rateCurrency: cur };
+  const setRateCurrency = async (cur: 'USD' | 'EUR' | 'CUSTOM') => {
+    // La personalizada no se pisa con la del BCV en la mañana.
+    const rates = { ...settings.rates, rateCurrency: cur, ...(cur === 'CUSTOM' ? { rateAuto: false } : {}) };
     try {
       await saveAdminSetting('rates', rates);
       ctx.setSettings({ ...settings, rates });
+      if (cur === 'CUSTOM') return toast('Tasa personalizada: escríbela y pulsa «Guardar tasas»');
       toast(`Se cobrará con la tasa del ${cur === 'EUR' ? 'euro' : 'dólar'} del BCV`);
       bringBcv(cur);
     } catch (e: any) {
@@ -516,7 +526,8 @@ export default function PosTab({ ctx }: { ctx: SalesCtx }) {
       <Card className="p-3 flex flex-wrap items-center gap-x-4 gap-y-2">
         <div className="flex items-center gap-2">
           <span className="text-[12px] text-[#52525b] whitespace-nowrap">💱 Tasa cobro (Bs/$):</span>
-          <Input type="number" step="any" value={tasa} onChange={(e) => setTasa(e.target.value)} disabled={!isAdmin} className="!w-28 !py-1.5" />
+          <Input type="number" step="any" value={tasa} onChange={(e) => setTasa(e.target.value)} disabled={!soloAdmin} title={soloAdmin ? '' : 'La tasa la fija el administrador'} className="!w-28 !py-1.5" />
+          <span className="text-[11px] text-[#6b7280] whitespace-nowrap">{custom ? 'personalizada' : settings.rates.rateCurrency === 'EUR' ? 'BCV euro' : 'BCV dólar'}</span>
         </div>
         <div className="flex items-center gap-2">
           <span className="text-[12px] text-[#52525b] whitespace-nowrap">💵 $ real por $ cobrado:</span>
@@ -525,14 +536,15 @@ export default function PosTab({ ctx }: { ctx: SalesCtx }) {
         {isAdmin && (
           <>
             <Btn className="!py-1.5 !text-[12px]" onClick={saveRates}>Guardar tasas</Btn>
-            <Select value={settings.rates.rateCurrency} onChange={(e) => setRateCurrency(e.target.value as 'USD' | 'EUR')} className="!w-auto !py-1.5 !text-[12px]" title="Con cuál tasa del BCV cobras">
+            <Select value={settings.rates.rateCurrency} onChange={(e) => setRateCurrency(e.target.value as 'USD' | 'EUR' | 'CUSTOM')} className="!w-auto !py-1.5 !text-[12px]" title="Con cuál tasa cobras">
               <option value="USD">Tasa BCV · Dólar</option>
               <option value="EUR">Tasa BCV · Euro</option>
+              {(soloAdmin || custom) && <option value="CUSTOM" disabled={!soloAdmin}>Tasa personalizada / promedio</option>}
             </Select>
-            <Btn variant="ghost" className="!py-1.5 !text-[12px]" disabled={bcvBusy} onClick={() => bringBcv()}>
+            {!custom && <Btn variant="ghost" className="!py-1.5 !text-[12px]" disabled={bcvBusy} onClick={() => bringBcv()}>
               {bcvBusy ? 'Consultando…' : '🏦 Traer tasa del BCV'}
-            </Btn>
-            <label className="flex items-center gap-2 text-[12px] text-[#52525b] cursor-pointer select-none" title="Cada mañana a las 5:00 la tasa se actualiza sola con la del BCV">
+            </Btn>}
+            {!custom && <label className="flex items-center gap-2 text-[12px] text-[#52525b] cursor-pointer select-none" title="Cada mañana a las 5:00 la tasa se actualiza sola con la del BCV">
               <span
                 onClick={toggleAuto}
                 className={cx('relative inline-block h-5 w-9 rounded-full transition-colors', settings.rates.rateAuto ? 'bg-[#16a34a]' : 'bg-[#d4d4d8]')}
@@ -540,7 +552,7 @@ export default function PosTab({ ctx }: { ctx: SalesCtx }) {
                 <span className={cx('absolute top-0.5 h-4 w-4 rounded-full bg-[#fff] shadow transition-all', settings.rates.rateAuto ? 'left-[18px]' : 'left-0.5')} />
               </span>
               Automática 5:00 AM
-            </label>
+            </label>}
           </>
         )}
         {rateLabel && <span className="text-[11px] text-[#6b7280] basis-full">{rateLabel}</span>}
@@ -597,11 +609,11 @@ export default function PosTab({ ctx }: { ctx: SalesCtx }) {
               {coloresDisponibles.map((c) => <option key={c} value={c}>{c}</option>)}
             </Select>
             <Pills<Mode> value={mode} onChange={changeMode} options={[{ key: 'detal', label: 'Detal' }, { key: 'mayor', label: 'Mayor' }]} />
-            <Btn variant="ghost" onClick={() => setFreeOpen(true)} title="Cobrar algo que no está en el inventario">＋ Línea libre</Btn>
+            {soloAdmin && <Btn variant="ghost" onClick={() => setFreeOpen(true)} title="Cobrar algo que no está en el inventario">＋ Línea libre</Btn>}
             <p className="basis-full text-[11px] text-[#6b7280]">
               <b>🧾 Facturación / 🛍️ Tienda / Todos</b>: qué catálogo ves (productos de las tiendas o los de la página web) ·{' '}
-              <b>Categoría</b> y <b>Color</b>: filtran la lista · <b>Detal / Mayor</b>: cambia todos los precios de la venta ·{' '}
-              <b>＋ Línea libre</b>: cobrar algo que no está en el inventario.
+              <b>Categoría</b> y <b>Color</b>: filtran la lista · <b>Detal / Mayor</b>: cambia todos los precios de la venta{soloAdmin ? <> · <b>＋ Línea libre</b>: cobrar algo que no está en el inventario</> : null} ·{' '}
+              <b>🎨</b> debajo de cada prenda: agregar el estampado que eligió el cliente.
             </p>
           </Card>
           <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 2xl:grid-cols-5 gap-3">
@@ -713,22 +725,30 @@ export default function PosTab({ ctx }: { ctx: SalesCtx }) {
                     </div>
                     <div className="text-[11px] text-[#6b7280]">{fmt(l.price)} c/u{l.prints?.length ? ` · incluye 🎨 ${l.prints.map((p) => `${p.name} ${fmt(p.price)}`).join(' + ')}` : ''}</div>
                     {!l.free && (
-                      <div className="mt-1 flex flex-wrap gap-1">
-                        {ctx.settings.prints.map((p) => {
-                          const on = !!l.prints?.some((x) => x.name === p.name);
-                          return (
-                            <button
-                              key={p.name}
-                              type="button"
-                              onClick={() => updateLine(l.key, { prints: on ? (l.prints ?? []).filter((x) => x.name !== p.name) : [...(l.prints ?? []), p] })}
-                              className={`rounded-full border px-2 py-0.5 text-[11px] ${on ? 'border-[#7e22ce] bg-[#f3e8ff] text-[#7e22ce]' : 'border-[#e6e6e9] text-[#52525b]'}`}
-                            >
-                              {on ? '✓ ' : '🎨 '}{p.name} +{fmt(p.price)}
-                            </button>
-                          );
-                        })}
-                        {isAdmin && (
-                          <button type="button" onClick={() => setPrintsOpen(true)} className="rounded-full border border-dashed border-[#d4d4d8] px-2 py-0.5 text-[11px] text-[#6b7280]">
+                      <div className="mt-1 flex flex-wrap items-center gap-1">
+                        {(l.prints ?? []).map((p) => (
+                          <span key={p.name} className="rounded-full border border-[#7e22ce] bg-[#f3e8ff] px-2 py-0.5 text-[11px] text-[#7e22ce]">
+                            🎨 {p.name} +{fmt(p.price)}
+                            <button type="button" className="ml-1" title="Quitar estampado" onClick={() => updateLine(l.key, { prints: (l.prints ?? []).filter((x) => x.name !== p.name) })}>✕</button>
+                          </span>
+                        ))}
+                        {ctx.settings.prints.some((p) => !l.prints?.some((x) => x.name === p.name)) && (
+                          <select
+                            value=""
+                            onChange={(e) => {
+                              const p = ctx.settings.prints.find((x) => x.name === e.target.value);
+                              if (p) updateLine(l.key, { prints: [...(l.prints ?? []), p] });
+                            }}
+                            className="rounded-md border border-[#e6e6e9] bg-[#fff] px-1.5 py-0.5 text-[11px] text-[#52525b]"
+                          >
+                            <option value="">🎨 Agregar estampado…</option>
+                            {ctx.settings.prints.filter((p) => !l.prints?.some((x) => x.name === p.name)).map((p) => (
+                              <option key={p.name} value={p.name}>{p.name} · +{fmt(p.price)}</option>
+                            ))}
+                          </select>
+                        )}
+                        {soloAdmin && (
+                          <button type="button" onClick={() => setPrintsOpen(true)} className="rounded-full border border-dashed border-[#d4d4d8] px-2 py-0.5 text-[11px] text-[#6b7280]" title="Editar lista de estampados y precios">
                             {ctx.settings.prints.length ? '⚙️' : '🎨 Configurar estampados'}
                           </button>
                         )}

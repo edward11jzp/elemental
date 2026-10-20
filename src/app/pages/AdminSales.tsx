@@ -73,7 +73,7 @@ export default function AdminSales() {
         setSettings(st);
         setCustomers(cs);
         // Tasa automática: a partir de las 5:00 a.m. (Venezuela) se toma la del BCV una vez al día.
-        if (isAdmin && st.rates.rateAuto && st.rates.rateDate !== todayVe() && veHour() >= 5) {
+        if (isAdmin && st.rates.rateAuto && st.rates.rateCurrency !== 'CUSTOM' && st.rates.rateDate !== todayVe() && veHour() >= 5) {
           try {
             const b = await fetchBcv();
             const rate = st.rates.rateCurrency === 'EUR' ? b.eur : b.usd;
