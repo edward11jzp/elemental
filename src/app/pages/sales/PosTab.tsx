@@ -4,7 +4,7 @@ import { useApp } from '../../context';
 import { Btn, Card, Input, Label, Modal, Pills, Select, Textarea, cx } from '../../components/admin/ui';
 import { fetchProviderPayments, loadLinks } from '../../lib/payconf';
 import { addSalePayment, createSale, fmt, todayVe, PAY_STATES, DOC_TYPES, type DocType, type PayState } from '../../lib/sales';
-import { createCustomer, fetchBcv, MONEY_ACCOUNTS, saveAdminSetting, accountByKey } from '../../lib/adminData';
+import { createCustomer, fetchBcv, MONEY_ACCOUNTS, saveAdminSetting, accountByKey, type Customer } from '../../lib/adminData';
 import { getColorUpcharge, getSizeUpcharge } from '../../lib/pricing';
 import type { Product } from '../../types';
 import type { SalesCtx } from '../AdminSales';
@@ -30,6 +30,11 @@ interface Line {
 }
 
 type Mode = 'detal' | 'mayor';
+
+const norm = (t: string) => (t ?? '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase();
+/** Palabras de búsqueda; a las largas se les quita la terminación (negra/negro/negros → negr). */
+const searchWords = (q: string) =>
+  norm(q.trim()).split(/\s+/).filter(Boolean).map((w) => (w.length >= 4 ? w.replace(/(as|os|es|a|o|s)$/, '') : w));
 
 const SUBCAT_LABEL: Record<string, string> = {
   't-shirts': 'Camisetas',
@@ -150,15 +155,18 @@ export default function PosTab({ ctx }: { ctx: SalesCtx }) {
     [products, tipo],
   );
   const categories = useMemo(() => [...new Set(delTipo.map((p) => p.subcategory))], [delTipo]);
+  // Búsqueda sin acentos y palabra por palabra, por nombre, código, categoría, color o talla:
+  // «franela negra m» encuentra la FRANELA en NEGRO talla M («negra» y «negro» cuentan igual).
+  const words = useMemo(() => searchWords(q), [q]);
   const list = useMemo(() => {
-    // Sin acentos y palabra por palabra: «franela dama» encuentra «FRANELA DE DAMA».
-    const norm = (t: string) => t.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase();
-    const words = norm(q.trim()).split(/\s+/).filter(Boolean);
     return delTipo.filter((p) => {
       if (cat && p.subcategory !== cat) return false;
       if (!words.length) return true;
-      const hay = norm([p.name, p.id, p.sku ?? '', ...Object.values(p.skuSizes ?? {}), SUBCAT_LABEL[p.subcategory] ?? p.subcategory].join(' '));
-      return words.every((w) => hay.includes(w));
+      const rows = sIdx.get(p.id) ?? [];
+      const hay = norm([p.name, p.id, p.sku ?? '', ...Object.values(p.skuSizes ?? {}), SUBCAT_LABEL[p.subcategory] ?? p.subcategory,
+        ...(p.colors ?? []), ...rows.map((r) => r.color)].join(' '));
+      const tallas = new Set([...(p.sizes ?? []), ...rows.map((r) => r.size)].map((t) => norm(t)));
+      return words.every((w) => hay.includes(w) || tallas.has(w));
     });
   }, [delTipo, q, cat]);
 
@@ -197,11 +205,17 @@ export default function PosTab({ ctx }: { ctx: SalesCtx }) {
     }
   };
 
-  const addProduct = (p: Product) => {
+  const addProduct = (p: Product, forced?: { size: string; color?: string }) => {
     if (stockOf(p.id) <= 0 && !encargo) return;
     const conStock = filasDe(p.id);
-    const size = conStock[0]?.size ?? p.sizes?.[0] ?? '';
-    const color = conStock.find((r) => r.size === size)?.color ?? '';
+    // Si se buscó una talla o un color, se elige la variante que más coincide.
+    const score = (r: { size: string; color: string }) =>
+      words.filter((w) => norm(r.size) === w || (w.length >= 3 && norm(r.color).includes(w))).length;
+    const mejor = forced
+      ? conStock.find((r) => r.size === forced.size && (!forced.color || r.color === forced.color)) ?? { size: forced.size, color: forced.color ?? '' }
+      : [...conStock].sort((a, b) => score(b) - score(a))[0];
+    const size = mejor?.size ?? p.sizes?.[0] ?? '';
+    const color = mejor?.color ?? conStock.find((r) => r.size === size)?.color ?? '';
     const key = `${p.id}|${size ?? ''}|${color}`;
     setLines((prev) => {
       const ex = prev.find((l) => l.key === key);
@@ -511,7 +525,26 @@ export default function PosTab({ ctx }: { ctx: SalesCtx }) {
                 </button>
               ))}
             </div>
-            <Input placeholder="Buscar por nombre, código o categoría…" value={q} onChange={(e) => setQ(e.target.value)} className="flex-1 min-w-[180px]" />
+            <Input
+              placeholder="Buscar por nombre, código, color o talla…"
+              value={q}
+              onChange={(e) => setQ(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key !== 'Enter') return;
+                // Código exacto (de producto o de talla) + Enter: se agrega directo a la venta.
+                const code = q.trim().toLowerCase();
+                for (const p of delTipo) {
+                  const talla = Object.entries(p.skuSizes ?? {}).find(([, c]) => c.toLowerCase() === code)?.[0];
+                  if (talla !== undefined || (p.sku ?? '').toLowerCase() === code) {
+                    addProduct(p, talla !== undefined ? { size: talla } : undefined);
+                    setQ('');
+                    return;
+                  }
+                }
+                if (list.length === 1) { addProduct(list[0]); setQ(''); }
+              }}
+              className="flex-1 min-w-[180px]"
+            />
             <Select value={cat} onChange={(e) => setCat(e.target.value)} className="!w-auto">
               <option value="">Todas las categorías</option>
               {categories.map((c) => (
@@ -580,12 +613,7 @@ export default function PosTab({ ctx }: { ctx: SalesCtx }) {
             <div>
               <Label>Cliente</Label>
               <div className="flex gap-1.5">
-                <Select value={customerId} onChange={(e) => setCustomerId(e.target.value)}>
-                  <option value="">Consumidor final</option>
-                  {ctx.customers.map((c) => (
-                    <option key={c.id} value={c.id}>{c.name}{c.cedula ? ' · ' + c.cedula : ''}</option>
-                  ))}
-                </Select>
+                <CustomerPicker customers={ctx.customers} value={customerId} onChange={setCustomerId} onNew={() => setCustOpen(true)} />
                 <Btn variant="ghost" className="!px-2.5" onClick={() => setCustOpen(true)} title="Nuevo cliente">＋</Btn>
               </div>
             </div>
@@ -918,5 +946,66 @@ function NewCustomerModal({ open, onClose, onSaved }: { open: boolean; onClose: 
         <div className="flex justify-end gap-2"><Btn variant="ghost" onClick={onClose}>Cancelar</Btn><Btn disabled={busy} onClick={save}>{busy ? 'Guardando…' : 'Guardar cliente'}</Btn></div>
       </div>
     </Modal>
+  );
+}
+
+/** Buscador de clientes: por nombre, cédula/RIF o teléfono, sin acentos ni puntos. */
+function CustomerPicker({ customers, value, onChange, onNew }: { customers: Customer[]; value: string; onChange: (id: string) => void; onNew: () => void }) {
+  const [q, setQ] = useState('');
+  const [open, setOpen] = useState(false);
+  const sel = customers.find((c) => c.id === value) ?? null;
+  const digits = (t: string) => (t ?? '').replace(/\D/g, '');
+  const res = useMemo(() => {
+    const words = norm(q.trim()).split(/\s+/).filter(Boolean);
+    if (!words.length) return [];
+    const num = digits(q);
+    return customers
+      .filter((c) => {
+        const hay = norm(`${c.name} ${c.email}`);
+        return words.every((w) => hay.includes(w) || (digits(w).length >= 3 && (digits(c.cedula).includes(digits(w)) || digits(c.phone).includes(digits(w)))));
+      })
+      .sort((a, b) => Number(num && digits(b.cedula) === num) - Number(num && digits(a.cedula) === num) || b.ordersCount - a.ordersCount)
+      .slice(0, 30);
+  }, [customers, q]);
+
+  if (sel && !open) {
+    return (
+      <div className="flex-1 min-w-0 flex items-center gap-2 rounded-lg border border-[#e6e6e9] bg-[#fff] px-3 py-2 text-[13px]">
+        <span className="min-w-0 flex-1 truncate"><b>{sel.name}</b>{sel.cedula ? <span className="text-[#6b7280]"> · {sel.cedula}</span> : null}</span>
+        <button type="button" title="Cambiar cliente" onClick={() => { onChange(''); setQ(''); setOpen(true); }} className="text-[#6b7280]">✕</button>
+      </div>
+    );
+  }
+  return (
+    <div className="relative flex-1 min-w-0">
+      <Input
+        placeholder="Consumidor final · buscar nombre, cédula o teléfono"
+        value={q}
+        onFocus={() => setOpen(true)}
+        onBlur={() => setTimeout(() => setOpen(false), 150)}
+        onChange={(e) => { setQ(e.target.value); setOpen(true); }}
+        onKeyDown={(e) => { if (e.key === 'Enter' && res[0]) { onChange(res[0].id); setOpen(false); } }}
+      />
+      {open && q.trim() && (
+        <div className="absolute z-20 mt-1 w-full max-h-72 overflow-auto rounded-lg border border-[#e6e6e9] bg-[#fff] shadow-lg">
+          {res.map((c) => (
+            <button
+              key={c.id}
+              type="button"
+              onMouseDown={(e) => e.preventDefault()}
+              onClick={() => { onChange(c.id); setOpen(false); }}
+              className="block w-full px-3 py-2 text-left text-[13px] hover:bg-[#f4f4f5]"
+            >
+              <b>{c.name}</b>
+              <span className="block text-[11px] text-[#6b7280]">{[c.cedula, c.phone].filter(Boolean).join(' · ') || 'sin cédula'}</span>
+            </button>
+          ))}
+          {!res.length && <div className="px-3 py-2 text-[12px] text-[#6b7280]">No hay clientes con «{q}».</div>}
+          <button type="button" onMouseDown={(e) => e.preventDefault()} onClick={() => { setOpen(false); onNew(); }} className="block w-full border-t border-[#f1f1f3] px-3 py-2 text-left text-[13px] text-[#1d4ed8] hover:bg-[#f4f4f5]">
+            ＋ Crear cliente nuevo
+          </button>
+        </div>
+      )}
+    </div>
   );
 }
