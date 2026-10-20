@@ -56,6 +56,7 @@ export default function InvoiceModal({ ctx, saleId, onClose }: { ctx: SalesCtx; 
           <Btn variant="ghost" className="!py-1.5 !text-[12px]" onClick={() => safe(() => printInvoice(s, co, fallback))}>🖨️ A4</Btn>
           <Btn variant="ghost" className="!py-1.5 !text-[12px]" onClick={() => safe(() => printTicket(s, co, fallback))}>🧾 Ticket 80mm</Btn>
           {ctx.isAdmin && <Btn variant="ghost" className="!py-1.5 !text-[12px]" onClick={editDate}>📅 Fecha</Btn>}
+          {s.doc === 'cotizacion' && !s.convertedTo && s.pay !== 'cancelado' && <Btn variant="success" className="!py-1.5 !text-[12px]" onClick={() => ctx.loadQuote(s)}>➜ Facturar</Btn>}
         </div>
       }
     >
@@ -63,6 +64,7 @@ export default function InvoiceModal({ ctx, saleId, onClose }: { ctx: SalesCtx; 
         <Btn variant="ghost" className="flex-1 !text-[12px]" onClick={() => safe(() => printInvoice(s, co, fallback))}>🖨️ A4</Btn>
         <Btn variant="ghost" className="flex-1 !text-[12px]" onClick={() => safe(() => printTicket(s, co, fallback))}>🧾 Ticket</Btn>
         {ctx.isAdmin && <Btn variant="ghost" className="!text-[12px]" onClick={editDate}>📅</Btn>}
+        {s.doc === 'cotizacion' && !s.convertedTo && s.pay !== 'cancelado' && <Btn variant="success" className="!text-[12px]" onClick={() => ctx.loadQuote(s)}>➜ Facturar</Btn>}
       </div>
       <div className="rounded-xl border border-[#ececef] overflow-x-auto" dangerouslySetInnerHTML={{ __html: invoiceHtml(s, co, fallback) }} />
       <div className="mt-3 rounded-lg border border-[#ececef] bg-[#fafafa] p-3 text-[12px] space-y-1">
@@ -77,6 +79,7 @@ export default function InvoiceModal({ ctx, saleId, onClose }: { ctx: SalesCtx; 
           </>
         )}
         <Row k="Facturó" v={s.userName || '—'} />
+        {s.convertedTo && <Row k="Facturado en" v={s.convertedTo} color="#15803d" />}
         {s.doc !== 'cotizacion' && (
           <label className="flex items-center gap-2 pt-1 cursor-pointer">
             <input type="checkbox" checked={s.isShipping} onChange={(e) => toggleEnvio(e.target.checked)} />

@@ -44,6 +44,8 @@ export interface Sale {
   locationName: string;
   /** La venta es un envío (marcado por la tienda). */
   isShipping: boolean;
+  /** Si es un presupuesto ya facturado, la venta que salió de él. */
+  convertedTo: string | null;
   customerId: string | null;
   customer: string;
   email: string;
@@ -90,6 +92,7 @@ function rowToSale(r: any): Sale {
     locationId: r.location_id ?? null,
     locationName: r.location_name ?? '',
     isShipping: !!r.is_shipping,
+    convertedTo: r.converted_to ?? null,
     customerId: r.customer_id ?? null,
     customer: r.customer ?? '',
     email: r.email ?? '',
@@ -144,6 +147,8 @@ export interface NewSale {
   initialAbono?: number;
   encargo?: boolean;
   shipping?: boolean;
+  /** Presupuesto del que sale esta venta. */
+  fromQuote?: string | null;
 }
 
 export async function createSale(s: NewSale): Promise<Sale> {

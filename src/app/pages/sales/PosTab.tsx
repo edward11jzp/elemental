@@ -104,6 +104,24 @@ export default function PosTab({ ctx }: { ctx: SalesCtx }) {
   const [busy, setBusy] = useState(false);
   const [encargo, setEncargo] = useState(false);
   const [envio, setEnvio] = useState(false);
+  // Presupuesto cargado para facturarlo: trae líneas, cliente y notas tal como se presupuestó.
+  const quote = ctx.quote;
+  useEffect(() => {
+    if (!quote) return;
+    setDoc('nota_entrega');
+    setCustomerId(quote.customerId ?? '');
+    setNotes(quote.notes);
+    setDiscount(String(quote.discount || 0));
+    setLines(quote.items.map((i, n) => {
+      const p = i.id ? products.find((x) => x.id === i.id) : undefined;
+      const key = i.id ? `${i.id}|${i.size ?? ''}|${i.color ?? ''}` : `free-${n}`;
+      return {
+        key, id: i.id, free: !i.id || !!i.free, name: i.name, image: p?.image, sizes: p?.sizes,
+        size: i.size ?? '', color: i.color ?? '', qty: i.qty, price: i.price, cost: i.cost,
+        stock: i.id ? qtyAt(sIdx, i.id, vendeEn, i.size ?? '', i.color ?? '') : 0,
+      };
+    }));
+  }, [quote]); // eslint-disable-line react-hooks/exhaustive-deps
   const [showDocHelp, setShowDocHelp] = useState(false);
   const [bnMsg, setBnMsg] = useState<{ text: string; color: string } | null>(null);
   // Venta al personal: a crédito (paga con abonos), con abono inicial opcional.
@@ -377,6 +395,7 @@ export default function PosTab({ ctx }: { ctx: SalesCtx }) {
         items: lines.map((l) => ({ id: l.id, free: !!l.free, name: l.name, size: l.size ?? null, color: l.color || null, qty: l.qty, price: l.price, cost: l.cost, deliverNow: l.free ? l.qty : (l.entregar ?? 0) })),
         encargo,
         shipping: envio,
+        fromQuote: quote?.id ?? null,
         discount: disc,
         taxRate: taxR,
         pay: aCredito ? ('pendiente' as const) : pay,
@@ -412,6 +431,7 @@ export default function PosTab({ ctx }: { ctx: SalesCtx }) {
       setLines([]);
       setEncargo(false);
       setEnvio(false);
+      ctx.loadQuote(null);
       setDiscount('0');
       setNotes('');
       await ctx.reloadSales();
@@ -546,6 +566,12 @@ export default function PosTab({ ctx }: { ctx: SalesCtx }) {
         <Card className="p-4 xl:sticky xl:top-[72px] space-y-3">
           <div className="flex items-center justify-between">
             <h3 className="text-[15px] font-bold">Venta actual</h3>
+            {quote && (
+              <span className="rounded-md bg-[#eff6ff] px-2 py-0.5 text-[11px] text-[#1d4ed8]">
+                📝 de {quote.id}
+                <button type="button" className="ml-1.5" title="Quitar presupuesto" onClick={() => { ctx.loadQuote(null); setLines([]); }}>✕</button>
+              </span>
+            )}
             {mode === 'mayor' && <span className="text-[11px] text-[#9333ea]">Precios al mayor</span>}
           </div>
 

@@ -19,6 +19,7 @@ import ReportsTab from './sales/ReportsTab';
 import AccountingTab from './sales/AccountingTab';
 import EncargosTab from './sales/EncargosTab';
 import MonthTab from './sales/MonthTab';
+import QuotesTab from './sales/QuotesTab';
 import InvoiceModal from './sales/InvoiceModal';
 import { bySede, useSedes } from '../lib/sedes';
 
@@ -32,9 +33,12 @@ export interface SalesCtx {
   setCustomers: (c: Customer[]) => void;
   reloadSales: () => Promise<void>;
   openInvoice: (id: string) => void;
+  /** Presupuesto que se está facturando en Nueva venta. */
+  quote: Sale | null;
+  loadQuote: (s: Sale | null) => void;
 }
 
-type Tab = 'pos' | 'docs' | 'encargos' | 'reports' | 'close' | 'month' | 'accounting';
+type Tab = 'pos' | 'quotes' | 'docs' | 'encargos' | 'reports' | 'close' | 'month' | 'accounting';
 
 // Hora de Venezuela (UTC-4).
 const veHour = () => new Date(Date.now() - 4 * 3600e3).getUTCHours();
@@ -51,6 +55,7 @@ export default function AdminSales() {
   const [settings, setSettings] = useState<AdminSettings>(DEFAULT_SETTINGS);
   const [customers, setCustomers] = useState<Customer[]>([]);
   const [invoiceId, setInvoiceId] = useState<string | null>(null);
+  const [quote, setQuote] = useState<Sale | null>(null);
   const [loadError, setLoadError] = useState<string | null>(null);
 
   const reloadSales = useCallback(async () => {
@@ -99,6 +104,11 @@ export default function AdminSales() {
     setCustomers,
     reloadSales,
     openInvoice: setInvoiceId,
+    quote,
+    loadQuote: (s) => {
+      setQuote(s);
+      if (s) { setInvoiceId(null); setTab('pos'); }
+    },
   };
 
   return (
@@ -115,6 +125,7 @@ export default function AdminSales() {
         onChange={setTab}
         tabs={[
           { key: 'pos', label: '🧾 Nueva venta' },
+          { key: 'quotes', label: '📝 Presupuestos' },
           { key: 'docs', label: '📄 Facturación' },
           { key: 'encargos', label: '📦 Encargos' },
           { key: 'reports', label: '📊 Reportes', hidden: !canCosts },
@@ -124,6 +135,7 @@ export default function AdminSales() {
         ]}
       />
       {tab === 'pos' && <PosTab ctx={ctx} />}
+      {tab === 'quotes' && <QuotesTab ctx={ctx} />}
       {tab === 'docs' && <DocsTab ctx={ctx} />}
       {tab === 'encargos' && <EncargosTab ctx={ctx} />}
       {tab === 'reports' && canCosts && <ReportsTab ctx={ctx} />}
