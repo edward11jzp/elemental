@@ -151,14 +151,15 @@ export default function PosTab({ ctx }: { ctx: SalesCtx }) {
   );
   const categories = useMemo(() => [...new Set(delTipo.map((p) => p.subcategory))], [delTipo]);
   const list = useMemo(() => {
-    const s = q.trim().toLowerCase();
-    return delTipo.filter(
-      (p) =>
-        (!cat || p.subcategory === cat) &&
-        (!s || p.name.toLowerCase().includes(s) || p.id.toLowerCase().includes(s)
-          || [p.sku ?? '', ...Object.values(p.skuSizes ?? {})].join(' ').toLowerCase().includes(s)
-          || (SUBCAT_LABEL[p.subcategory] ?? p.subcategory).toLowerCase().includes(s)),
-    );
+    // Sin acentos y palabra por palabra: «franela dama» encuentra «FRANELA DE DAMA».
+    const norm = (t: string) => t.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase();
+    const words = norm(q.trim()).split(/\s+/).filter(Boolean);
+    return delTipo.filter((p) => {
+      if (cat && p.subcategory !== cat) return false;
+      if (!words.length) return true;
+      const hay = norm([p.name, p.id, p.sku ?? '', ...Object.values(p.skuSizes ?? {}), SUBCAT_LABEL[p.subcategory] ?? p.subcategory].join(' '));
+      return words.every((w) => hay.includes(w));
+    });
   }, [delTipo, q, cat]);
 
   const changeMode = (m: Mode) => {
