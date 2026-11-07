@@ -5,6 +5,21 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Elemental</title>
+    <!-- App en la pantalla de inicio (Android e iPhone). En /admin se cambia al manifiesto del panel. -->
+    <link rel="manifest" id="app-manifest" href="/manifest.webmanifest" />
+    <meta name="theme-color" content="#000000" />
+    <link rel="icon" type="image/png" href="/icons/icon-192.png" />
+    <link rel="apple-touch-icon" href="/icons/apple-touch-icon.png" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="black" />
+    <meta name="apple-mobile-web-app-title" id="app-title" content="Elemental" />
+    <script>
+      if (location.pathname.startsWith('/admin')) {
+        document.getElementById('app-manifest').href = '/manifest-admin.webmanifest';
+        document.getElementById('app-title').content = 'Elemental Admin';
+      }
+    </script>
   </head>
   <body>
     <div id="root"></div>
